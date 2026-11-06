@@ -18,7 +18,7 @@ from .githubread import GithubReader
 from .images import ImageGen
 from .sandbox import harden_parent
 from .store import Store
-from .telegram_app import AccessGate, router
+from .telegram_app import AccessGate, AdminLog, router
 from .tools import SearchClient, Weather
 
 
@@ -72,9 +72,12 @@ async def run() -> None:
     gate = AccessGate()
     dp = Dispatcher()
     dp.message.outer_middleware(gate)
+    alerts = AdminLog(bot, settings.admin_ids)
+    dp.message.outer_middleware(alerts)
     dp.include_router(router)
     me = await bot.get_me()
     logging.info("bot is up (admins configured: %d, allow_all: %s)", len(settings.admin_ids), settings.allow_all)
+    await alerts.notify("✅ Bot started. I will tell you here when an allowed user uses it (type only, never their text) and when something fails.")
     try:
         await dp.start_polling(bot, assistant=assistant, access=access, bot_username=me.username or "",
                                bot_id=me.id, allowed_updates=["message"])

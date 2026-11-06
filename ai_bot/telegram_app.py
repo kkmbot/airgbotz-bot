@@ -45,6 +45,48 @@ class AccessGate(BaseMiddleware):
         return None
 
 
+class AdminLog(BaseMiddleware):
+    """Tell the admins what happened: one short line per message from someone who is not an admin
+    (kind only, never the message text), plus a line when handling a message fails."""
+
+    def __init__(self, bot, admin_ids) -> None:
+        self.bot, self.admin_ids = bot, tuple(admin_ids)
+
+    @staticmethod
+    def kind(event) -> str:
+        if getattr(event, "photo", None):
+            return "photo"
+        if getattr(event, "voice", None) or getattr(event, "audio", None):
+            return "voice/audio"
+        if getattr(event, "document", None):
+            return "file"
+        t = (getattr(event, "text", None) or "").strip()
+        if t.startswith("/"):
+            return "command " + t.split()[0].split("@")[0][:20]
+        return "text message"
+
+    async def notify(self, text: str) -> None:
+        for aid in self.admin_ids:
+            try:
+                await self.bot.send_message(aid, text, parse_mode=None)
+            except Exception:  # noqa: BLE001 - an alert must never break the bot
+                log.warning("could not alert an admin")
+
+    async def __call__(self, handler, event, data):
+        user = getattr(event, "from_user", None)
+        access: Access = data["access"]
+        is_admin = bool(user and access.is_admin(user.id))
+        if user and not is_admin and access.is_allowed(user.id):
+            who = f"{user.full_name or 'user'} (id {user.id})"
+            await self.notify(f"👤 {who}: {self.kind(event)}")
+        try:
+            return await handler(event, data)
+        except Exception as e:  # noqa: BLE001
+            who = f"id {user.id}" if user else "unknown"
+            await self.notify(f"⚠️ Error while handling a message from {who}: {type(e).__name__}")
+            raise
+
+
 @asynccontextmanager
 async def typing(bot, chat_id: int):
     stop = asyncio.Event()
