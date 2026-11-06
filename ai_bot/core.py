@@ -230,7 +230,7 @@ class Assistant:
         out_fmt = fmt if fmt in docs_mod.FORMATS else "txt"
         try:
             base_name = filename.rsplit(".", 1)[0]
-            name, out = docs_mod.make_doc(out_fmt, base_name + " edited", clean_reply(new))
+            name, out = docs_mod.make_doc(out_fmt, base_name + " edited", clean_reply(new), with_title=False)
         except docs_mod.DocError as e:
             return Reply(str(e), kind="fail")
         self._heavy_count(user_id)

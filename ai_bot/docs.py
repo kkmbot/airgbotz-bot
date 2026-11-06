@@ -9,6 +9,7 @@ FORMATS = ("docx", "xlsx", "pdf", "txt", "md", "csv")
 MAX_IN_BYTES = 8_000_000
 MAX_TEXT = 12_000
 _FONT_CANDIDATES = (
+    os.path.join(os.path.dirname(__file__), "fonts", "DejaVuSans.ttf"),
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
@@ -48,7 +49,7 @@ def _rows(content: str) -> list[list[str]]:
     return rows
 
 
-def make_doc(fmt: str, title: str, content: str) -> tuple[str, bytes]:
+def make_doc(fmt: str, title: str, content: str, with_title: bool = True) -> tuple[str, bytes]:
     fmt = fmt.lower().lstrip(".")
     if fmt not in FORMATS:
         raise DocError("formats: " + ", ".join(FORMATS))
@@ -64,7 +65,8 @@ def make_doc(fmt: str, title: str, content: str) -> tuple[str, bytes]:
     if fmt == "docx":
         from docx import Document
         d = Document()
-        d.add_heading(title[:100] or "Document", level=1)
+        if with_title:
+            d.add_heading(title[:100] or "Document", level=1)
         for line in content.splitlines():
             s = line.rstrip()
             if not s:
@@ -96,20 +98,34 @@ def make_doc(fmt: str, title: str, content: str) -> tuple[str, bytes]:
     pdf = FPDF()
     pdf.set_auto_page_break(True, 15)
     pdf.add_page()
+    here = os.path.join(os.path.dirname(__file__), "fonts", "NotoSansDevanagari-Regular.ttf")
+    hindi = bool(re.search(r"[\u0900-\u097F]", title + content)) and os.path.exists(here)
     font = next((f for f in _FONT_CANDIDATES if os.path.exists(f)), None)
     if font:
         pdf.add_font("U", "", font)
         pdf.set_font("U", size=12)
+        if hindi:
+            pdf.add_font("H", "", here)
+            pdf.set_fallback_fonts(["H"], exact_match=False)
+            try:  # joins letters properly (needs uharfbuzz); without it letters still show, just unjoined
+                pdf.set_text_shaping(True)
+            except Exception:  # noqa: BLE001
+                pass
         enc = lambda s: s  # noqa: E731
     else:
         pdf.set_font("Helvetica", size=12)
         enc = lambda s: s.encode("latin-1", "replace").decode("latin-1")  # noqa: E731
-    pdf.set_font_size(16)
-    pdf.multi_cell(0, 9, enc(title[:100] or "Document"), new_x="LMARGIN", new_y="NEXT")
+    if with_title:
+        pdf.set_font_size(16)
+        pdf.multi_cell(0, 9, enc(title[:100] or "Document"), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font_size(12)
     for line in content.splitlines():
         pdf.multi_cell(0, 7, enc(re.sub(r"^#{1,3}\s+", "", line).replace("**", "")) or " ", new_x="LMARGIN", new_y="NEXT")
     return name, bytes(pdf.output())
+
+
+def _clean(t: str) -> str:
+    return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", t)
 
 
 def extract_text(filename: str, data: bytes) -> tuple[str, str]:
@@ -140,7 +156,7 @@ def extract_text(filename: str, data: bytes) -> tuple[str, str]:
         if ext == "pdf":
             from pypdf import PdfReader
             rd = PdfReader(io.BytesIO(data))
-            return "pdf", "\n".join((p.extract_text() or "") for p in rd.pages[:30])[:MAX_TEXT]
+            return "pdf", _clean("\n".join((p.extract_text() or "") for p in rd.pages[:30]))[:MAX_TEXT]
         if ext in ("txt", "md", "csv", "json", "py", "js", "html", "xml", "log", "yaml", "yml", "ini", ""):
             return (ext if ext in ("txt", "md", "csv") else "txt"), data.decode("utf-8", errors="replace")[:MAX_TEXT]
     except DocError:
