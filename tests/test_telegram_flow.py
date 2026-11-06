@@ -138,5 +138,5 @@ async def test_start_and_reset_commands_answer_for_admin():
     await dp.feed_update(bot, make_update(ADMIN, "/start", 1), **kw)
     await dp.feed_update(bot, make_update(ADMIN, "/reset", 2), **kw)
     texts = [p.get("text") for n, p in session.sent if n == "SendMessage"]
-    assert texts[0].startswith("Hi, main Sathi")
+    assert texts[0].startswith("Hi, I'm Sathi")
     assert "clear" in texts[1]

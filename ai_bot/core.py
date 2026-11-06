@@ -122,10 +122,10 @@ class Assistant:
             if tool:
                 kind, arg = tool
                 result = await self._run_tool(kind, arg)
-                follow = history + [{"role": "user", "content": f"{result}\n\nAb is basis par mera sawal jawab do."}]
+                follow = history + [{"role": "user", "content": f"{result}\n\nNow answer my question using this, in the language I wrote in."}]
                 reply, provider = await self.chain.generate(follow, system + "\n\n" + persona.RESULT_RULES)
                 if parse_tool(reply):
-                    reply = "Abhi is baare me pakki info nahi mil paayi. Thodi der baad phir poochho."
+                    reply = "I couldn't get reliable info on that right now. Please try again in a little while."
         except AllProvidersDown:
             return Reply(persona.DOWN_TEXT, kind="down")
         final = clean_reply(reply) or "Hmm, is baar jawab khaali aaya. Ek baar phir poochho?"

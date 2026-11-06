@@ -59,12 +59,12 @@ class SearchClient:
                 for x in r.json().get("organic", [])]
 
 
-WMO = {0: "saaf aasmaan", 1: "thoda saaf", 2: "aadha baadal", 3: "baadal",
-       45: "kohra", 48: "kohra", 51: "halki boondabaandi", 53: "boondabaandi", 55: "tez boondabaandi",
-       61: "halki baarish", 63: "baarish", 65: "tez baarish", 66: "jamne wali baarish", 67: "tez jamne wali baarish",
-       71: "halki barf", 73: "barf", 75: "tez barf", 77: "barf ke daane",
-       80: "halki bauchhar", 81: "bauchhar", 82: "tez bauchhar", 85: "barf ki bauchhar", 86: "tez barf ki bauchhar",
-       95: "garaj ke saath baarish", 96: "olon ke saath garaj", 99: "olon ke saath garaj"}
+WMO = {0: "clear sky", 1: "mostly clear", 2: "partly cloudy", 3: "overcast",
+       45: "fog", 48: "fog", 51: "light drizzle", 53: "drizzle", 55: "heavy drizzle",
+       61: "light rain", 63: "rain", 65: "heavy rain", 66: "freezing rain", 67: "heavy freezing rain",
+       71: "light snow", 73: "snow", 75: "heavy snow", 77: "snow grains",
+       80: "light showers", 81: "showers", 82: "heavy showers", 85: "snow showers", 86: "heavy snow showers",
+       95: "thunderstorm", 96: "thunderstorm with hail", 99: "thunderstorm with hail"}
 
 
 class Weather:
@@ -94,5 +94,5 @@ class Weather:
             raise WeatherUnavailable() from e
         code = int(cur.get("weather_code", -1))
         return (f"{loc.get('name', place)}, {loc.get('country', '')}: {cur.get('temperature_2m')}°C, "
-                f"{WMO.get(code, 'mausam ka code ' + str(code))}, nami {cur.get('relative_humidity_2m')}%, "
-                f"hawa {cur.get('wind_speed_10m')} km/h (Open-Meteo)").replace(", ,", ",")
+                f"{WMO.get(code, 'weather code ' + str(code))}, humidity {cur.get('relative_humidity_2m')}%, "
+                f"wind {cur.get('wind_speed_10m')} km/h (Open-Meteo)").replace(", ,", ",")

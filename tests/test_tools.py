@@ -57,7 +57,7 @@ async def test_weather_summary_and_unknown_place():
 
     w = Weather(client(handler))
     line = await w.current("Delhi")
-    assert "21.5°C" in line and "saaf aasmaan" in line and "Open-Meteo" in line
+    assert "21.5°C" in line and "clear sky" in line and "Open-Meteo" in line
     assert await w.current("Nowhereville") is None
 
 
