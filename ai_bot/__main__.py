@@ -72,7 +72,7 @@ async def run() -> None:
     gate = AccessGate()
     dp = Dispatcher()
     dp.message.outer_middleware(gate)
-    alerts = AdminLog(bot, settings.admin_ids)
+    alerts = AdminLog(bot, settings.admin_ids, settings.log_chat_id)
     dp.message.outer_middleware(alerts)
     dp.include_router(router)
     me = await bot.get_me()

@@ -86,6 +86,7 @@ class Settings:
     serper_api_key: str = field(default="", repr=False)
     github_token: str = field(default="", repr=False)
     enable_admin_sandbox: bool = False
+    log_chat_id: int = 0          # optional channel/group that also receives the admin log lines
     heavy_daily_limit: int = 15   # images/docs/links/github per non-admin user per day
 
     @classmethod
@@ -122,6 +123,7 @@ class Settings:
             serper_api_key=(g("SERPER_API_KEY") or "").strip(),
             github_token=(g("GITHUB_TOKEN") or "").strip(),
             enable_admin_sandbox=_bool(g("ENABLE_ADMIN_SANDBOX"), False),
+            log_chat_id=_int(g("LOG_CHAT_ID"), 0),
             heavy_daily_limit=_int(g("HEAVY_DAILY_LIMIT"), 15),
         )
 

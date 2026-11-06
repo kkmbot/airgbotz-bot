@@ -49,8 +49,9 @@ class AdminLog(BaseMiddleware):
     """Tell the admins what happened: one short line per message from someone who is not an admin
     (kind only, never the message text), plus a line when handling a message fails."""
 
-    def __init__(self, bot, admin_ids) -> None:
-        self.bot, self.admin_ids = bot, tuple(admin_ids)
+    def __init__(self, bot, admin_ids, log_chat_id: int = 0) -> None:
+        self.bot = bot
+        self.targets = tuple(admin_ids) + ((log_chat_id,) if log_chat_id else ())
 
     @staticmethod
     def kind(event) -> str:
@@ -66,7 +67,7 @@ class AdminLog(BaseMiddleware):
         return "text message"
 
     async def notify(self, text: str) -> None:
-        for aid in self.admin_ids:
+        for aid in self.targets:
             try:
                 await self.bot.send_message(aid, text, parse_mode=None)
             except Exception:  # noqa: BLE001 - an alert must never break the bot
