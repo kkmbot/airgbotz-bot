@@ -94,6 +94,9 @@ class Assistant:
         summary = self.store.get_summary(chat_id)
         if summary:
             parts.append(f"What you already know about this user from earlier chat: {summary}")
+        notes = self.store.notes(chat_id)
+        if notes:
+            parts.append("Things this user asked you to remember (treat as true):\n" + "\n".join("- " + n["text"] for n in notes[-40:]))
         if extra:
             parts.append(extra)
         return "\n\n".join(parts)
@@ -366,6 +369,24 @@ class Assistant:
         self.store.delete_messages_upto(chat_id, old[-1]["id"])
 
     # ---- public API ------------------------------------------------------
+    def memory_command(self, chat_id: int, text: str) -> str | None:
+        """'remember ...', 'what do you remember', 'forget my notes' in plain words. Notes live only until the host restarts."""
+        t = text.strip()
+        low = t.lower()
+        m = re.match(r"(?is)^(please\s+)?(remember|yaad rakh(?:na|o)?|yaad rakho)\b[\s:,-]*(that\s+)?(.+)$", t)
+        if m and len(m.group(4)) >= 3 and len(t) < 500:
+            if len(self.store.notes(chat_id)) >= 40:
+                return "My notes list is full (40). Say \"forget my notes\" first."
+            self.store.add_note(chat_id, m.group(4).strip())
+            return "Noted ✅ (I will remember it in this chat)"
+        if re.fullmatch(r"(what (do you|u) remember|my notes|show (my )?notes|kya yaad hai|kya kya yaad hai)\??[.!]*", low):
+            ns = self.store.notes(chat_id)
+            return "\n".join(f"{i}. {n['text']}" for i, n in enumerate(ns, 1)) if ns else "Nothing saved yet. Say \"remember ...\"."
+        if re.fullmatch(r"(please )?(forget (my |all )?(notes|everything you remember)|notes (clear|delete) kar( do)?)[.!]*", low):
+            self.store.clear_notes(chat_id)
+            return "Notes cleared ✅"
+        return None
+
     def natural_command(self, user_id: int, text: str) -> str | None:
         """A few housekeeping wishes said in plain words, so no slash command is needed."""
         t = text.strip().lower()
@@ -380,6 +401,9 @@ class Assistant:
         return None
 
     async def answer_text(self, chat_id: int, user_id: int, text: str, forced_tool: tuple[str, str] | None = None) -> Reply:
+        mem = None if forced_tool else self.memory_command(chat_id, text)
+        if mem is not None:
+            return Reply(mem)
         nat = None if forced_tool else self.natural_command(user_id, text)
         if nat == "reset":
             return Reply(self.reset(chat_id))

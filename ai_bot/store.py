@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS user_daily (
     day TEXT NOT NULL, user_id INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (day, user_id)
 );
+CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL, text TEXT NOT NULL, created REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
 
@@ -120,6 +121,15 @@ class Store:
             (day, user_id))
 
     # ---- meta ------------------------------------------------------------
+    def add_note(self, chat_id: int, text: str) -> None:
+        self._run("INSERT INTO notes(chat_id, text, created) VALUES (?,?,?)", (chat_id, text, time.time()))
+
+    def notes(self, chat_id: int) -> list[dict]:
+        return self._rows("SELECT id, text FROM notes WHERE chat_id=? ORDER BY id", (chat_id,))
+
+    def clear_notes(self, chat_id: int) -> None:
+        self._run("DELETE FROM notes WHERE chat_id=?", (chat_id,))
+
     def set_meta(self, key: str, value: str) -> None:
         self._run("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", (key, value))
 

@@ -30,6 +30,7 @@ HELP_TEXT = """No commands needed, just write what you want:
 - "make an excel / pdf / word file of ..." for a document
 - paste a link or GitHub repo to have it read
 - send a file with a caption to get it edited
+- say "remember my exam is on 5 Dec" to save a note, "what do you remember" to see them, "forget my notes" to clear
 - say "reset" to clear this chat's memory, "which model" to see which AI is answering
 Admins can also say "usage", or use /allow <id>, /deny <id>, /users."""
 
