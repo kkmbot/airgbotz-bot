@@ -1,0 +1,115 @@
+# Sathi: free AI chat bot for Telegram
+
+A private Telegram bot that answers in Hinglish or English, remembers each chat, searches the web when it needs fresh facts, checks the weather, listens to voice notes and looks at photos. It runs on free AI tiers, and when a free tier runs out it moves to the next one.
+
+**Right now only the admin ID can use it.** Everyone else gets one polite line. You can open it up later.
+
+## How the fallback works
+
+1. Gemini (free key from Google AI Studio)
+2. Groq (free key, also does voice-to-text)
+3. OpenRouter (free models only, no credit card)
+4. Cloudflare Workers AI (optional, only if you set both values)
+5. Ollama on your own server (optional, free and unlimited, but slow on CPU)
+
+If a provider says "rate limited" (429), it sits out for 10 minutes. Every other error just moves to the next one. If all of them fail, the bot says it is busy and to try again later. Photos only go to Gemini (the only vision option here). Search uses Tavily first, then Serper. Weather uses Open-Meteo, which needs no key.
+
+Honest limits: free tiers are capped per day and can change without notice. A rough guess is a few hundred to a couple thousand replies a day across all providers. That is a guess, not a promise.
+
+---
+
+## Hinglish version (short)
+
+- Bot sirf admin (aap) ke liye chalega. Dusre log ko "Private bot" wali line milegi.
+- Keys (Gemini, Groq, OpenRouter, Tavily) Coolify ke Environment me daalo. Code me, chat me, ya GitHub me kabhi mat daalna.
+- Ek free provider ki limit khatam ho to agla apne aap chalta hai.
+- Ollama (apne server ka model) bina limit ke chalta hai, par CPU pe bahut slow hai.
+
+---
+
+## Step 1: Get the keys (you do this yourself, about 15 minutes)
+
+| What | Where | Notes |
+|---|---|---|
+| Telegram bot token | Telegram app, search **@BotFather**, send `/newbot` | Copy the token it gives you. |
+| Your Telegram user ID | Message **@userinfobot** on Telegram | It replies with a number. That is `ADMIN_IDS`. |
+| Gemini key | https://aistudio.google.com/apikey | Sign in with Google, create key. No card. |
+| Groq key | https://console.groq.com/keys | Sign up, create key. No card for the free tier as far as the research could check (verify on the page). |
+| OpenRouter key | https://openrouter.ai/settings/keys | Sign up, create key. Do not add credit. |
+| Tavily key (search) | https://app.tavily.com | Free plan. |
+| Serper key (search, backup) | https://serper.dev | Optional. |
+
+Never send these keys or the token to anyone in a chat.
+
+## Step 2: Put the code on your host
+
+Any host that runs a Python or Docker process works. The bot needs no open port (it long-polls Telegram).
+
+- **Dockerfile:** build it as is. Use a volume at `/data` to keep chat memory across redeploys.
+- **Plain Python buildpack:** `requirements.txt` and `Procfile` (`worker: python -m ai_bot`) are at the top level.
+- If the host sets `PORT`, a tiny health endpoint answers `ok` on it. If `/data` is not writable, the bot keeps its database in `./data` instead (memory then resets on redeploy).
+
+### On Coolify
+
+Option A (recommended): push this folder to a **private** GitHub repo, then in Coolify:
+1. Open your project, click **+ New** → **Application**.
+2. Pick your GitHub source, choose the repo and branch.
+3. Build pack: **Dockerfile**. Port: leave empty (the bot does not open a port; it uses long polling).
+4. Go to the **Persistent Storage** tab and add a volume: destination path `/data`. This keeps the chat memory safe across redeploys.
+
+Option B: use **Docker Compose** resource and paste `docker-compose.yml`. Coolify then reads the `bot` service from it.
+
+## Step 3: Set the environment variables
+
+In the app's **Environment Variables** screen, add:
+
+- `TELEGRAM_BOT_TOKEN` = the BotFather token (required)
+- `ADMIN_IDS` = your numeric Telegram ID (required; comma-separated if more than one)
+- `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `TAVILY_API_KEY`, `SERPER_API_KEY` (fill the ones you have)
+- `ALLOW_ALL` = `false` (keep this until you want to open the bot)
+- Optional: `BOT_NAME`, `DAILY_USER_LIMIT`, `PROVIDER_ORDER`, `MEMORY_TURNS`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `OLLAMA_URL`, `OLLAMA_MODEL`
+
+`.env.example` lists every variable with placeholder values. Do not put real values in that file.
+
+## Step 4: Deploy and check
+
+1. Click **Deploy**. Wait for the build to finish.
+2. Open **Logs**. You should see `bot is up`. If you see `TELEGRAM_BOT_TOKEN is not set`, fix the variable and redeploy.
+3. In Telegram, open your bot and send `/start`, then `/model`. The model list shows which providers are ready.
+4. Send a normal question, a Hinglish question, "aaj ka mausam Delhi ka", and a voice note.
+
+## Step 5: Let someone else use it later
+
+Send `/allow 123456789` (their Telegram ID) from your admin account. `/deny` takes it back, and `/users` lists who has access. For open access, set `ALLOW_ALL=true` and redeploy.
+
+## Optional: local model on your server (Ollama)
+
+This is free and has no daily limit, but a CPU-only server is slow. Expect slow replies, and do not expect the same quality as Gemini.
+
+- Easiest on Coolify: deploy an **Ollama** service (image `ollama/ollama`), give it a volume at `/root/.ollama`, then run `ollama pull qwen2.5:3b-instruct` once in its console.
+- Set `OLLAMA_URL` to the internal URL Coolify gives that service (for example `http://ollama:11434`), and `OLLAMA_MODEL=qwen2.5:3b-instruct`.
+- The compose file also has an `ollama` profile (`docker compose --profile local-llm up -d`). Whether Coolify runs profiles is not verified here, so the separate service is the safer route.
+
+## Running it on your own computer (for testing)
+
+```
+cp .env.example .env        # then fill in real values in .env (never commit it)
+python -m venv .venv && . .venv/bin/activate
+pip install -r requirements-dev.txt
+pytest                       # tests use fake providers, no keys needed
+python -m ai_bot             # long polling, Ctrl+C to stop
+```
+
+## Commands
+
+- `/start`, `/help`: intro and help
+- `/reset`: clear this chat's memory
+- `/model`: which provider answered last, and which ones are cooling down
+- `/usage`: today's counts per provider
+- Admin only: `/allow <id>`, `/deny <id>`, `/users`
+
+## What is tested and what is not
+
+- Tested by automated tests (70 tests, all pass): fallback order, 429 cooldown, admin-only gate, /allow and /deny, memory and summary, daily cap, message splitting, search and weather code paths, and the Telegram handlers driven through aiogram with a recorded (not real) Telegram connection.
+- Tested live: the weather lookup (Open-Meteo, no key) and the OpenRouter free-model list. The bot token was checked with Telegram's getMe.
+- NOT tested yet: real Gemini, Groq, OpenRouter, Tavily answers with real keys; voice notes; photos; a real chat through Telegram; Docker build (Docker was not on the test machine); ARM servers; Ollama on your server; the Coolify deploy.
