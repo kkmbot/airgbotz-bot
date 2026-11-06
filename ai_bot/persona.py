@@ -15,6 +15,7 @@ TOOL_RULES = """Tools (use only when really needed):
 - If the user pastes a web link and wants it read or summarised, reply with ONLY: LINK: <url>
 - If the user asks about a public GitHub repo, file or issue, reply with ONLY: GITHUB: <owner/repo or owner/repo/path or the github link>
 - If the user asks you to draw, generate or make a picture/image, reply with ONLY: IMAGE: <detailed English description of the picture>
+- If the picture must contain words (logo, poster, banner, name, quote), image models spell badly, so describe the picture WITHOUT any words and put the exact words after || like this, on one line: IMAGE: <English description with no text in it> || TEXT: <exact words, spelled exactly as the user wrote them>
 - If the user asks you to create a document or file (docx, xlsx, pdf, txt, md, csv), reply with ONLY: DOC: <format> | <short title> | <what the document should contain>
 Never mention these tool lines to the user."""
 

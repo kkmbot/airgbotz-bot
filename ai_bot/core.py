@@ -17,7 +17,7 @@ from . import sandbox as sandbox_mod
 from .githubread import GithubError
 from . import extras
 from .e2b_box import BoxUnavailable
-from .images import ImageUnavailable
+from .images import ImageUnavailable, add_caption
 from .textutil import clean_reply
 import httpx
 
@@ -151,7 +151,14 @@ class Assistant:
         if self.images is None:
             return Reply(persona.IMAGE_DOWN_TEXT, kind="off")
         try:
+            caption = ""
+            if "||" in prompt:
+                prompt, _, rest = prompt.partition("||")
+                caption = re.sub(r"^\s*TEXT:\s*", "", rest, flags=re.I).strip()
+                prompt = prompt.strip() + ", no text, no letters, no words, no watermark"
             data = await self.images.generate(prompt)
+            if caption:
+                data = add_caption(data, caption)
         except ImageUnavailable:
             return Reply(persona.IMAGE_DOWN_TEXT, kind="off")
         self._heavy_count(user_id)

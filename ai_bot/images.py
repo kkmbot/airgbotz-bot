@@ -11,6 +11,20 @@ from urllib.parse import quote
 import httpx
 
 
+def _trim_watermark(data: bytes) -> bytes:
+    """The free tier stamps a small badge in the bottom-right corner; crop the bottom 6% away."""
+    import io
+    try:
+        from PIL import Image
+        img = Image.open(io.BytesIO(data)).convert("RGB")
+        w, h = img.size
+        out = io.BytesIO()
+        img.crop((0, 0, w, int(h * 0.94))).save(out, "JPEG", quality=92)
+        return out.getvalue()
+    except Exception:  # noqa: BLE001 - keep the original if anything is odd
+        return data
+
+
 class ImageUnavailable(Exception):
     pass
 
@@ -32,7 +46,7 @@ class ImageGen:
             except httpx.HTTPError:
                 return None
             if r.status_code == 200 and r.headers.get("content-type", "").startswith("image/") and len(r.content) > 2000:
-                return r.content
+                return _trim_watermark(r.content)
             if r.status_code in (402, 429) and attempt == 0:
                 m = re.search(r"[Rr]etry after (\d+)s", r.text)
                 wait = int(m.group(1)) + 1 if m else 20
@@ -67,3 +81,37 @@ class ImageGen:
             if data:
                 return data
         raise ImageUnavailable("image service is busy")
+
+
+def add_caption(data: bytes, text: str) -> bytes:
+    """Write exact words on a picture with a real font (image models garble letters). Returns JPEG bytes."""
+    import io
+    import os
+    from PIL import Image, ImageDraw, ImageFont
+
+    text = " ".join(text.split())[:60]
+    if not text:
+        return data
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    w, h = img.size
+    fonts = os.path.join(os.path.dirname(__file__), "fonts")
+    name = "NotoSansDevanagari-Regular.ttf" if re.search(r"[\u0900-\u097F]", text) else "DejaVuSans.ttf"
+    path = os.path.join(fonts, name)
+    size = int(h * 0.11)
+    while size > 14:
+        font = ImageFont.truetype(path, size)
+        if font.getlength(text) <= w * 0.88:
+            break
+        size -= 4
+    pad = int(size * 0.55)
+    band_h = size + pad * 2
+    top = h - band_h - int(h * 0.04)
+    over = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(over)
+    d.rectangle([0, top, w, top + band_h], fill=(0, 0, 0, 165))
+    d.text((w / 2, top + band_h / 2), text, font=font, fill=(255, 255, 255, 255), anchor="mm",
+           stroke_width=max(1, size // 28), stroke_fill=(255, 255, 255, 255))
+    out = Image.alpha_composite(img.convert("RGBA"), over).convert("RGB")
+    buf = io.BytesIO()
+    out.save(buf, "JPEG", quality=90)
+    return buf.getvalue()
