@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -207,6 +208,37 @@ class Assistant:
         self._heavy_count(user_id)
         return Reply(f"Here is your {fmt} file ✅", kind="ok", file=(name, data))
 
+    async def _edit_pdf_inplace(self, chat_id: int, filename: str, data: bytes, instruction: str):
+        """Returns (file name, bytes) with the original layout kept, or None to fall back to the rebuild path."""
+        from . import pdfedit
+        try:
+            blocks = pdfedit.list_blocks(data)
+        except pdfedit.PdfEditError:
+            return None
+        listing = json.dumps([{"id": b["id"], "text": b["text"]} for b in blocks], ensure_ascii=False)[:60000]
+        sys_p = (self._system(chat_id) + "\n\nYou edit a PDF block by block. You get a JSON list of text blocks {id,text}. Apply the user's instruction "
+                 "and answer with ONLY a JSON object mapping the id (as a string) of each block that must CHANGE to its complete new text. "
+                 "Leave unchanged blocks out. Keep each new text about as long as the old one when possible. No code fences, no commentary.")
+        try:
+            raw, _ = await self.chain.generate([{"role": "user", "content": f"Instruction: {instruction}\n\nBlocks:\n{listing}"}], sys_p)
+        except AllProvidersDown:
+            raise
+        m = re.search(r"\{.*\}", raw, re.S)
+        if not m:
+            return None
+        try:
+            obj = json.loads(m.group(0))
+            edits = {int(k): str(v) for k, v in obj.items() if str(k).isdigit() and 0 <= int(k) < len(blocks)}
+        except (ValueError, TypeError):
+            return None
+        if not edits:
+            return None
+        try:
+            out = pdfedit.apply_edits(data, edits)
+        except Exception:  # noqa: BLE001 - any layout problem: use the safe rebuild path instead
+            return None
+        return filename.rsplit(".", 1)[0] + " edited.pdf", out
+
     async def edit_document(self, chat_id: int, user_id: int, filename: str, data: bytes, instruction: str) -> Reply:
         if not self._heavy_ok(user_id):
             return Reply(persona.HEAVY_LIMIT_TEXT, kind="limit")
@@ -223,6 +255,14 @@ class Assistant:
                 return Reply(persona.DOWN_TEXT, kind="down")
             self._count_user(user_id)
             return Reply(clean_reply(summ) + "\n\n(Send the file again with a caption like 'fix the grammar' or 'translate to Hindi' and I will return the edited file.)", prov, "ok")
+        if filename.lower().endswith(".pdf") and instruction.strip():
+            try:
+                done = await self._edit_pdf_inplace(chat_id, filename, data, instruction)
+            except AllProvidersDown:
+                return Reply(persona.DOWN_TEXT, kind="down")
+            if done:
+                self._heavy_count(user_id)
+                return Reply("Edited ✅ Your original PDF layout, images and colours are kept; only the changed text was replaced. Check it once, long lines may look slightly smaller.", kind="ok", file=done)
         sys_p = (self._system(chat_id) + "\n\nYou edit documents. Apply the user's instruction to the document text and output ONLY the complete new "
                  "document text, no comments, no code fences. Keep '# ' headings, '- ' bullets and ' | ' table columns where they exist.")
         try:

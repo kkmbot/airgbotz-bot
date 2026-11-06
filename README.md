@@ -154,3 +154,8 @@ The bot's personality is direct and does not lecture, and it will talk about ord
 ## No card? Free fallback for `/run` and agent mode
 
 If there is no `E2B_API_KEY`, the bot uses the public Judge0 CE service (ce.judge0.com) for admin Python runs: free, no account. Limits: plain Python 3 only (numpy etc. missing), no internet, no pip, no files kept between runs, no `/sh` or `/files`. Your code is sent to that third-party service, so never put secrets in it. It is a public instance with no promise of uptime. Set `SANDBOX_BACKEND=judge0` to force it or `local` for the weak local runner.
+
+
+## PDF edit keeps the layout
+
+When you send a PDF with a caption like "fix the grammar", the bot asks the AI which text blocks must change and replaces only those blocks in your original PDF (PyMuPDF, AGPL-3.0). Images, colours and untouched text stay. Limits: scanned PDFs (photo only) cannot be edited; text that gets longer is shrunk to fit its box; very complex layouts may look a little off, so check the result. If the in-place edit fails, the bot falls back to rebuilding the file from its text (layout lost). Other formats (docx, xlsx, txt, csv) are still rebuilt from text.
