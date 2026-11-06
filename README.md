@@ -149,3 +149,8 @@ The bot's personality is direct and does not lecture, and it will talk about ord
 - Tested by automated tests (91 tests, all pass): fallback order, 429 cooldown, admin-only gate, /allow and /deny, memory and summary, daily cap, message splitting, search and weather code paths, and the Telegram handlers driven through aiogram with a recorded (not real) Telegram connection.
 - Tested live: the weather lookup (Open-Meteo, no key) and the OpenRouter free-model list. The bot token was checked with Telegram's getMe.
 - NOT tested yet: real Gemini, Groq, OpenRouter, Tavily answers with real keys; voice notes; photos; a real chat through Telegram; Docker build (Docker was not on the test machine); ARM servers; Ollama on your server; the Coolify deploy.
+
+
+## No card? Free fallback for `/run` and agent mode
+
+If there is no `E2B_API_KEY`, the bot uses the public Judge0 CE service (ce.judge0.com) for admin Python runs: free, no account. Limits: plain Python 3 only (numpy etc. missing), no internet, no pip, no files kept between runs, no `/sh` or `/files`. Your code is sent to that third-party service, so never put secrets in it. It is a public instance with no promise of uptime. Set `SANDBOX_BACKEND=judge0` to force it or `local` for the weak local runner.

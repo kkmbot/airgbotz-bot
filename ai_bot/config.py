@@ -87,7 +87,7 @@ class Settings:
     github_token: str = field(default="", repr=False)
     enable_admin_sandbox: bool = False
     e2b_api_key: str = field(default="", repr=False)
-    sandbox_backend: str = "auto"   # auto | e2b | local
+    sandbox_backend: str = "auto"   # auto (e2b if key, else free judge0) | e2b | judge0 | local
     sandbox_timeout: int = 60
     sandbox_idle_seconds: int = 300
     sandbox_daily_limit: int = 200

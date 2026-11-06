@@ -61,7 +61,7 @@ def auto_tool(text: str) -> tuple[str, str] | None:
 
 class Assistant:
     def __init__(self, settings: Settings, store: Store, chain: Chain, access: Access,
-                 search: SearchClient, weather: Weather, stt=None, images=None, github=None, fetcher=None, box=None) -> None:
+                 search: SearchClient, weather: Weather, stt=None, images=None, github=None, fetcher=None, box=None, judge0=None) -> None:
         self.settings = settings
         self.store = store
         self.chain = chain
@@ -69,6 +69,7 @@ class Assistant:
         self.search = search
         self.weather = weather
         self.box = box            # E2BBox or None
+        self.judge0 = judge0      # free Judge0 fallback or None
         self._sbx_runs: dict[tuple[str, int], int] = {}
         self.images = images      # object with async generate(prompt) -> bytes
         self.github = github      # object with async read(spec) -> str
@@ -231,6 +232,8 @@ class Assistant:
         s = self.settings
         if self.box is not None and self.box.configured() and s.sandbox_backend in ("auto", "e2b"):
             return "e2b"
+        if self.judge0 is not None and s.sandbox_backend in ("auto", "judge0"):
+            return "judge0"
         if s.enable_admin_sandbox and s.sandbox_backend in ("auto", "local"):
             return "local"
         return "off"
@@ -258,6 +261,8 @@ class Assistant:
             return "Today's sandbox limit is over 🙏"
         if mode == "local":
             return await sandbox_mod.run_python(code)
+        if mode == "judge0":
+            return await self.judge0.run_python(chat_id, code)
         try:
             return await self.box.run_python(chat_id, code)
         except BoxUnavailable as e:
@@ -383,7 +388,7 @@ class Assistant:
                 reply, provider = "", None
                 tool = forced_tool or auto
             else:
-                agent = self.access.is_admin(user_id) and self.sandbox_mode() == "e2b"
+                agent = self.access.is_admin(user_id) and self.sandbox_mode() in ("e2b", "judge0")
                 reply, provider = await self.chain.generate(
                     history, system + "\n\n" + persona.TOOL_RULES + (persona.AGENT_RULES if agent else ""))
                 if agent and re.match(r"(?is)\s*(RUNPY|SENDFILE):", reply):

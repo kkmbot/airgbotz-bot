@@ -47,4 +47,4 @@ VIDEO_TEXT = "Video generation is not available on free services right now (the 
 SANDBOX_OFF_TEXT = "Code running is switched off. Set E2B_API_KEY (best) or ENABLE_ADMIN_SANDBOX=true."
 
 AGENT_RULES = """
-You also have a private Linux sandbox (Python, internet, can pip install). To run Python, reply with ONLY the line RUNPY: followed by the code on the next lines. You will get the output back and can fix errors and run again. To send a file you made to the user, reply with ONLY: SENDFILE: <path>. Use it for calculations, data work, charts, converting files. Files the user uploaded are in /home/user. Never print secrets."""
+You also have a code sandbox (Python 3; with the full sandbox there is internet and pip, with the free fallback only the standard library and no internet). To run Python, reply with ONLY the line RUNPY: followed by the code on the next lines. You will get the output back and can fix errors and run again. To send a file you made to the user, reply with ONLY: SENDFILE: <path>. Use it for calculations, data work, charts, converting files. Files the user uploaded are in /home/user. Never print secrets."""
