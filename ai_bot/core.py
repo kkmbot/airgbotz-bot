@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -40,6 +41,21 @@ def parse_tool(reply: str) -> tuple[str, str] | None:
             arg = s[len(tag):].strip().splitlines()[0].strip() if s[len(tag):].strip() else ""
             return (kind, arg) if arg else None
     return None
+
+
+_URL = re.compile(r"https?://[^\s<>\")]+", re.I)
+
+
+def auto_tool(text: str) -> tuple[str, str] | None:
+    """A short message that carries a link is read without any command: GitHub links via the API, others as pages."""
+    t = text.strip()
+    m = _URL.search(t)
+    if not m or len(t) > 500:
+        return None
+    url = m.group(0).rstrip(".,;:!?")
+    if re.match(r"https?://(www\.)?github\.com/[\w.-]+/[\w.-]+", url, re.I):
+        return ("github", url)
+    return ("link", url)
 
 
 class Assistant:
@@ -182,7 +198,14 @@ class Assistant:
         except docs_mod.DocError as e:
             return Reply(str(e), kind="fail")
         if not instruction.strip():
-            return Reply("Send the file again with a caption saying what to change, e.g. 'fix the grammar' or 'translate to Hindi'.", kind="fail")
+            try:
+                summ, prov = await self.chain.generate(
+                    [{"role": "user", "content": f"Summarise this document briefly in the language it is written in, then ask what I want changed:\n\n{text}"}],
+                    self._system(chat_id))
+            except AllProvidersDown:
+                return Reply(persona.DOWN_TEXT, kind="down")
+            self._count_user(user_id)
+            return Reply(clean_reply(summ) + "\n\n(Send the file again with a caption like 'fix the grammar' or 'translate to Hindi' and I will return the edited file.)", prov, "ok")
         sys_p = (self._system(chat_id) + "\n\nYou edit documents. Apply the user's instruction to the document text and output ONLY the complete new "
                  "document text, no comments, no code fences. Keep '# ' headings, '- ' bullets and ' | ' table columns where they exist.")
         try:
@@ -241,9 +264,10 @@ class Assistant:
         history = [{"role": m["role"], "content": m["content"]} for m in self.store.recent(chat_id, self._window())]
         system = self._system(chat_id)
         try:
-            if forced_tool:
+            auto = None if forced_tool else auto_tool(text)
+            if forced_tool or auto:
                 reply, provider = "", None
-                tool = forced_tool
+                tool = forced_tool or auto
             else:
                 reply, provider = await self.chain.generate(history, system + "\n\n" + persona.TOOL_RULES)
                 tool = parse_tool(reply)

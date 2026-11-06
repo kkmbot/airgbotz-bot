@@ -20,21 +20,18 @@ Never mention these tool lines to the user."""
 
 RESULT_RULES = """The tool result is in the last user message. Answer the user's question with it, briefly, in their language. Name the source (site name) in a few words. Do not print raw URLs unless the user asked. Do not output SEARCH: or WEATHER: lines."""
 
-START_TEXT = """Hi, I'm {name} 🙂 Ask me anything: questions, studies, chat, live things like "weather in Delhi", pictures (/image), files (/doc), links and GitHub repos.
-You can send voice messages too. If you send a photo, tell me what you want to know about it.
-I reply in your language. /reset clears this chat's memory. /help lists all commands."""
+START_TEXT = """Hi, I'm {name} 🙂 Just talk to me, no commands needed.
+Ask anything, say "draw a red fort at sunset", "make me a pdf study plan", "weather in Delhi", paste a web or GitHub link and I'll read it, or send a file (txt, md, csv, docx, xlsx, pdf) with what to change and I'll send it back edited. Voice messages and photos work too.
+I reply in your language."""
 
-HELP_TEXT = """Commands:
-/start - intro
-/reset - clear this chat's memory
-/model - which AI is answering now and which are on cooldown
-/usage - today's counts
-/image <description> - make a picture
-/doc <format> <what> - make a docx, xlsx, pdf, txt, md or csv file
-/read <link> - read a web page
-/github <owner/repo[/path]> - read a public GitHub repo, file or issue
-You can also send me a txt, md, csv, docx, xlsx or pdf with an instruction and I will return the edited file.
-Admin only: /allow <id>, /deny <id>, /users, /run <python code> (if switched on)"""
+HELP_TEXT = """No commands needed, just write what you want:
+- questions, chat, studies, news, weather
+- "draw ..." for a picture
+- "make an excel / pdf / word file of ..." for a document
+- paste a link or GitHub repo to have it read
+- send a file with a caption to get it edited
+(/reset clears this chat's memory, /model shows which AI is answering, /usage shows today's counts)
+Admin only: /allow <id>, /deny <id>, /users, /run <python> (if switched on)"""
 
 DOWN_TEXT = "All the free AIs are at their limit or busy right now 🙏 Please try again in a little while."
 LIMIT_TEXT = "Today's limit is over 🙏 Let's talk tomorrow."
