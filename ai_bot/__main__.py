@@ -77,6 +77,11 @@ async def run() -> None:
     alerts = AdminLog(bot, settings.admin_ids, settings.log_chat_id)
     dp.message.outer_middleware(alerts)
     dp.include_router(router)
+    try:
+        from aiogram.types import BotCommandScopeDefault
+        await bot.delete_my_commands(scope=BotCommandScopeDefault())  # no slash-command menu: just talk
+    except Exception:  # noqa: BLE001
+        logging.warning("could not clear the command menu")
     me = await bot.get_me()
     logging.info("bot is up (admins configured: %d, allow_all: %s)", len(settings.admin_ids), settings.allow_all)
     await alerts.notify("✅ Bot started. I will tell you here when an allowed user uses it (type only, never their text) and when something fails.")

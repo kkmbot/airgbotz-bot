@@ -30,8 +30,8 @@ HELP_TEXT = """No commands needed, just write what you want:
 - "make an excel / pdf / word file of ..." for a document
 - paste a link or GitHub repo to have it read
 - send a file with a caption to get it edited
-(/reset clears this chat's memory, /model shows which AI is answering, /usage shows today's counts)
-Admin only: /allow <id>, /deny <id>, /users, /run <python>, /sh <command>, /files [path] (needs E2B_API_KEY; send a file with caption "sandbox" to put it there)"""
+- say "reset" to clear this chat's memory, "which model" to see which AI is answering
+Admins can also say "usage", or use /allow <id>, /deny <id>, /users."""
 
 DOWN_TEXT = "All the free AIs are at their limit or busy right now 🙏 Please try again in a little while."
 LIMIT_TEXT = "Today's limit is over 🙏 Let's talk tomorrow."

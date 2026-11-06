@@ -351,7 +351,27 @@ class Assistant:
         self.store.delete_messages_upto(chat_id, old[-1]["id"])
 
     # ---- public API ------------------------------------------------------
+    def natural_command(self, user_id: int, text: str) -> str | None:
+        """A few housekeeping wishes said in plain words, so no slash command is needed."""
+        t = text.strip().lower()
+        if len(t) > 60:
+            return None
+        if re.fullmatch(r"(please )?(reset|clear|forget)( (this )?(chat|memory|everything))?[.!]*|(yaad|memory|chat) (clear|reset|saaf) kar( do| de)?[.!]*", t):
+            return "reset"
+        if re.fullmatch(r"(which|what|kaun ?sa?) (ai|model)( (is )?(answering|chal raha hai|use ho raha hai))?\??|model status", t):
+            return "model"
+        if self.access.is_admin(user_id) and re.fullmatch(r"(today'?s? )?(usage|aaj ka usage)\??", t):
+            return "usage"
+        return None
+
     async def answer_text(self, chat_id: int, user_id: int, text: str, forced_tool: tuple[str, str] | None = None) -> Reply:
+        nat = None if forced_tool else self.natural_command(user_id, text)
+        if nat == "reset":
+            return Reply(self.reset(chat_id))
+        if nat == "model":
+            return Reply(self.model_status())
+        if nat == "usage":
+            return Reply(self.usage_text())
         if not self._check_cap(user_id):
             return Reply(persona.LIMIT_TEXT, kind="limit")
         self.store.add_message(chat_id, "user", text)
