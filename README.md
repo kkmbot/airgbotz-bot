@@ -127,7 +127,16 @@ python -m ai_bot             # long polling, Ctrl+C to stop
 
 Per-user daily cap for pictures, files, links and GitHub: `HEAVY_DAILY_LIMIT` (default 15). Admins are exempt.
 
-## The code runner (`/run`) is not a security boundary
+## Sandbox on E2B (recommended): a real separate Linux computer for the admin
+
+1. Make a free account at e2b.dev (the Hobby plan needs no card: a one-time $100 usage credit, sessions up to 1 hour, per the pricing page on 6 Nov 2026) and create an API key.
+2. Put it in the host's environment variables as `E2B_API_KEY` and redeploy.
+3. Admin commands: `/run <python>`, `/sh <command>` (pip install, curl, ls), `/files` (list), `/files /home/user/chart.png` (get a file in Telegram). Send any file that is not txt/md/csv/docx/xlsx/pdf, or any file with the caption `sandbox`, and it is uploaded to `/home/user`.
+4. Agent mode: for the admin, the model can write code, run it in the sandbox, read errors and fix them (up to 5 rounds), and send back a file it made.
+
+Each chat gets its own sandbox VM, which shuts down after `SANDBOX_IDLE_SECONDS` (default 300) of silence so the free credit lasts. The bot token and provider keys are never sent into the sandbox. Only admins can use it. `SANDBOX_DAILY_LIMIT` (default 200 runs a day) and a 60 s run limit protect the credit. Code inside the sandbox can reach the internet and anything you upload, so do not upload secrets. Tested here with a fake E2B only; the real service needs your key.
+
+## The local code runner (`/run` without E2B) is not a security boundary
 
 With `ENABLE_ADMIN_SANDBOX=true` an admin can run Python. The code runs in a separate process with an empty environment (the bot token and provider keys are not passed), a throwaway folder, and limits on time (10 s), CPU, memory, file size and output. It is **not** isolated like a container or a virtual machine: it runs as the same user on the same machine, can use the network, and can read any file that user can read. Only switch it on if the only admins are people you trust with the server. The bot also marks its own process non-dumpable so the runner cannot read its memory or environment through /proc; this was not tested on every host.
 

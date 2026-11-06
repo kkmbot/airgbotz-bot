@@ -290,8 +290,31 @@ async def cmd_run(message: Message, command: CommandObject, bot, assistant: Assi
     if not assistant.access.is_admin(message.from_user.id):
         return
     async with typing(bot, message.chat.id):
-        out = await assistant.run_code(message.from_user.id, command.args or "")
-    await message.answer(out[:3500] or "(no output)", parse_mode=None)
+        out = await assistant.run_code(message.from_user.id, command.args or "", message.chat.id)
+    await send_long(message, out or "(no output)")
+
+
+@router.message(Command("sh"))
+async def cmd_sh(message: Message, command: CommandObject, bot, assistant: Assistant) -> None:
+    if not assistant.access.is_admin(message.from_user.id):
+        return
+    async with typing(bot, message.chat.id):
+        out = await assistant.run_shell(message.from_user.id, message.chat.id, command.args or "")
+    await send_long(message, out or "(no output)")
+
+
+@router.message(Command("files"))
+async def cmd_files(message: Message, command: CommandObject, bot, assistant: Assistant) -> None:
+    if not assistant.access.is_admin(message.from_user.id):
+        return
+    arg = (command.args or "").strip()
+    async with typing(bot, message.chat.id):
+        if arg.startswith("/") and "." in arg.rsplit("/", 1)[-1]:
+            res = await assistant.sandbox_get(message.from_user.id, message.chat.id, arg)
+            await send_reply(message, res)
+            return
+        out = await assistant.sandbox_files(message.from_user.id, message.chat.id, arg)
+    await send_long(message, out)
 
 
 @router.message(F.document)
@@ -304,6 +327,12 @@ async def on_document(message: Message, bot, assistant: Assistant, bot_username:
         return
     buf = io.BytesIO()
     await bot.download(doc, destination=buf)
+    if assistant.access.is_admin(message.from_user.id) and assistant.sandbox_mode() == "e2b" \
+            and ((message.caption or "").strip().lower().startswith(("sandbox", "/sandbox", "/upload"))
+                 or (doc.file_name or "").lower().rsplit(".", 1)[-1] not in ("txt", "md", "csv", "docx", "xlsx", "pdf")):
+        path = await assistant.sandbox_put(message.from_user.id, message.chat.id, doc.file_name or "upload.bin", buf.getvalue())
+        await message.answer(f"Uploaded to the sandbox: {path}" if path else "Upload to the sandbox failed 🙏", parse_mode=None)
+        return
     async with typing(bot, message.chat.id):
         res = await assistant.edit_document(message.chat.id, message.from_user.id, doc.file_name or "file.txt",
                                             buf.getvalue(), _strip_mention(message.caption or "", bot_username))

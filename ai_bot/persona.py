@@ -31,7 +31,7 @@ HELP_TEXT = """No commands needed, just write what you want:
 - paste a link or GitHub repo to have it read
 - send a file with a caption to get it edited
 (/reset clears this chat's memory, /model shows which AI is answering, /usage shows today's counts)
-Admin only: /allow <id>, /deny <id>, /users, /run <python> (if switched on)"""
+Admin only: /allow <id>, /deny <id>, /users, /run <python>, /sh <command>, /files [path] (needs E2B_API_KEY; send a file with caption "sandbox" to put it there)"""
 
 DOWN_TEXT = "All the free AIs are at their limit or busy right now 🙏 Please try again in a little while."
 LIMIT_TEXT = "Today's limit is over 🙏 Let's talk tomorrow."
@@ -44,4 +44,7 @@ SEARCH_DOWN_TEXT = "Search isn't available right now, so I can only tell you wha
 HEAVY_LIMIT_TEXT = "Today's limit for pictures, files and links is over 🙏 Try again tomorrow."
 IMAGE_DOWN_TEXT = "The picture service is busy right now 🙏 Try again in a minute."
 VIDEO_TEXT = "Video generation is not available on free services right now (the ones that exist need a paid plan or give a few clips with long queues). Pictures and files work."
-SANDBOX_OFF_TEXT = "Code running is switched off. The owner can enable it with ENABLE_ADMIN_SANDBOX=true."
+SANDBOX_OFF_TEXT = "Code running is switched off. Set E2B_API_KEY (best) or ENABLE_ADMIN_SANDBOX=true."
+
+AGENT_RULES = """
+You also have a private Linux sandbox (Python, internet, can pip install). To run Python, reply with ONLY the line RUNPY: followed by the code on the next lines. You will get the output back and can fix errors and run again. To send a file you made to the user, reply with ONLY: SENDFILE: <path>. Use it for calculations, data work, charts, converting files. Files the user uploaded are in /home/user. Never print secrets."""

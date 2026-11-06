@@ -14,6 +14,7 @@ from .store import Store
 from . import docs as docs_mod
 from . import sandbox as sandbox_mod
 from .githubread import GithubError
+from .e2b_box import BoxUnavailable
 from .images import ImageUnavailable
 from .textutil import clean_reply
 from .web import FetchFailed, UnsafeURL, fetch_text
@@ -60,13 +61,15 @@ def auto_tool(text: str) -> tuple[str, str] | None:
 
 class Assistant:
     def __init__(self, settings: Settings, store: Store, chain: Chain, access: Access,
-                 search: SearchClient, weather: Weather, stt=None, images=None, github=None, fetcher=None) -> None:
+                 search: SearchClient, weather: Weather, stt=None, images=None, github=None, fetcher=None, box=None) -> None:
         self.settings = settings
         self.store = store
         self.chain = chain
         self.access = access
         self.search = search
         self.weather = weather
+        self.box = box            # E2BBox or None
+        self._sbx_runs: dict[tuple[str, int], int] = {}
         self.images = images      # object with async generate(prompt) -> bytes
         self.github = github      # object with async read(spec) -> str
         self.fetcher = fetcher or fetch_text
@@ -223,17 +226,108 @@ class Assistant:
         note = "Edited ✅ (I rebuild the file from its text, so fancy layout, colours and images are not kept.)"
         return Reply(note, kind="ok", file=(name, out))
 
-    async def run_code(self, user_id: int, code: str) -> str:
+    # ---- admin sandbox (E2B VM, or the weaker local runner) -------------
+    def sandbox_mode(self) -> str:
+        s = self.settings
+        if self.box is not None and self.box.configured() and s.sandbox_backend in ("auto", "e2b"):
+            return "e2b"
+        if s.enable_admin_sandbox and s.sandbox_backend in ("auto", "local"):
+            return "local"
+        return "off"
+
+    def _sbx_ok(self) -> bool:
+        k = (self.today(), 0)
+        self._sbx_runs = {kk: v for kk, v in self._sbx_runs.items() if kk[0] == k[0]}
+        if self._sbx_runs.get(k, 0) >= self.settings.sandbox_daily_limit:
+            return False
+        self._sbx_runs[k] = self._sbx_runs.get(k, 0) + 1
+        return True
+
+    async def run_code(self, user_id: int, code: str, chat_id: int = 0) -> str:
         if not self.access.is_admin(user_id):
             return ""
-        if not self.settings.enable_admin_sandbox:
+        mode = self.sandbox_mode()
+        if mode == "off":
             return persona.SANDBOX_OFF_TEXT
         code = code.strip().strip("`")
         if code.lower().startswith("python"):
             code = code[6:].lstrip()
         if not code:
             return "Use: /run print(2+2)"
-        return await sandbox_mod.run_python(code)
+        if not self._sbx_ok():
+            return "Today's sandbox limit is over 🙏"
+        if mode == "local":
+            return await sandbox_mod.run_python(code)
+        try:
+            return await self.box.run_python(chat_id, code)
+        except BoxUnavailable as e:
+            return str(e)
+
+    async def run_shell(self, user_id: int, chat_id: int, cmd: str) -> str:
+        if not self.access.is_admin(user_id):
+            return ""
+        if self.sandbox_mode() != "e2b":
+            return "The shell needs the E2B sandbox (set E2B_API_KEY)."
+        if not cmd.strip():
+            return "Use: /sh ls -la   or   /sh pip install pandas"
+        if not self._sbx_ok():
+            return "Today's sandbox limit is over 🙏"
+        try:
+            return await self.box.run_shell(chat_id, cmd.strip())
+        except BoxUnavailable as e:
+            return str(e)
+
+    async def sandbox_files(self, user_id: int, chat_id: int, path: str = "") -> str:
+        if not self.access.is_admin(user_id) or self.sandbox_mode() != "e2b":
+            return "Files need the E2B sandbox (set E2B_API_KEY)."
+        try:
+            return await self.box.list_files(chat_id, path.strip() or "/home/user")
+        except BoxUnavailable as e:
+            return str(e)
+
+    async def sandbox_get(self, user_id: int, chat_id: int, path: str) -> Reply:
+        if not self.access.is_admin(user_id) or self.sandbox_mode() != "e2b":
+            return Reply("Files need the E2B sandbox (set E2B_API_KEY).", kind="off")
+        path = path.strip()
+        if not path:
+            return Reply("Use: /files to list, then /files /home/user/chart.png to get one", kind="fail")
+        try:
+            data = await self.box.read_file(chat_id, path)
+        except BoxUnavailable as e:
+            return Reply(str(e), kind="fail")
+        return Reply("", kind="ok", file=(path.rsplit("/", 1)[-1] or "file", data))
+
+    async def sandbox_put(self, user_id: int, chat_id: int, name: str, data: bytes) -> str | None:
+        """Copy an uploaded file into the sandbox. Returns the path, or None when not applicable."""
+        if not self.access.is_admin(user_id) or self.sandbox_mode() != "e2b":
+            return None
+        try:
+            return await self.box.write_file(chat_id, name, data)
+        except BoxUnavailable:
+            return None
+
+    async def agent_loop(self, chat_id: int, user_id: int, history: list, system: str, reply: str, provider):
+        """The model asked to run code: run it, show it the result, repeat (max 5 rounds)."""
+        msgs = list(history)
+        for _ in range(5):
+            m = re.match(r"(?is)\s*RUNPY:\s*\n?(.*)", reply)
+            s = re.match(r"(?is)\s*SENDFILE:\s*(\S+)", reply)
+            if s:
+                res = await self.sandbox_get(user_id, chat_id, s.group(1))
+                if res.file:
+                    res.text = "Here is the file ✅"
+                return res
+            if not m:
+                return Reply(clean_reply(reply) or "Done.", provider, "ok")
+            code = m.group(1).strip().strip("`")
+            if code.lower().startswith("python"):
+                code = code[6:].lstrip()
+            out = await self.run_code(user_id, code, chat_id)
+            msgs += [{"role": "assistant", "content": reply},
+                     {"role": "user", "content": f"[sandbox result]\n{out}\n\nIf the task is done, answer me in my language (reply SENDFILE: <path> to send a file you made). "
+                                                 "If there was an error, fix it and reply RUNPY: again."}]
+            reply, provider = await self.chain.generate(msgs, system + "\n\n" + persona.TOOL_RULES + persona.AGENT_RULES)
+        return Reply(clean_reply(reply) or "I could not finish that in 5 tries.", provider, "ok")
 
     async def _maybe_summarize(self, chat_id: int) -> None:
         window = self._window()
@@ -269,7 +363,14 @@ class Assistant:
                 reply, provider = "", None
                 tool = forced_tool or auto
             else:
-                reply, provider = await self.chain.generate(history, system + "\n\n" + persona.TOOL_RULES)
+                agent = self.access.is_admin(user_id) and self.sandbox_mode() == "e2b"
+                reply, provider = await self.chain.generate(
+                    history, system + "\n\n" + persona.TOOL_RULES + (persona.AGENT_RULES if agent else ""))
+                if agent and re.match(r"(?is)\s*(RUNPY|SENDFILE):", reply):
+                    res = await self.agent_loop(chat_id, user_id, history, system, reply, provider)
+                    self.store.add_message(chat_id, "assistant", res.text or (f"[file: {res.file[0]}]" if res.file else "done"))
+                    self._count_user(user_id)
+                    return res
                 tool = parse_tool(reply)
             if tool and tool[0] == "image":
                 res = await self.make_image(user_id, tool[1])

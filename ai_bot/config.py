@@ -86,6 +86,11 @@ class Settings:
     serper_api_key: str = field(default="", repr=False)
     github_token: str = field(default="", repr=False)
     enable_admin_sandbox: bool = False
+    e2b_api_key: str = field(default="", repr=False)
+    sandbox_backend: str = "auto"   # auto | e2b | local
+    sandbox_timeout: int = 60
+    sandbox_idle_seconds: int = 300
+    sandbox_daily_limit: int = 200
     log_chat_id: int = 0          # optional channel/group that also receives the admin log lines
     heavy_daily_limit: int = 15   # images/docs/links/github per non-admin user per day
 
@@ -123,6 +128,11 @@ class Settings:
             serper_api_key=(g("SERPER_API_KEY") or "").strip(),
             github_token=(g("GITHUB_TOKEN") or "").strip(),
             enable_admin_sandbox=_bool(g("ENABLE_ADMIN_SANDBOX"), False),
+            e2b_api_key=(g("E2B_API_KEY") or "").strip(),
+            sandbox_backend=(g("SANDBOX_BACKEND") or "auto").strip().lower(),
+            sandbox_timeout=_int(g("SANDBOX_TIMEOUT_SECONDS"), 60),
+            sandbox_idle_seconds=_int(g("SANDBOX_IDLE_SECONDS"), 300),
+            sandbox_daily_limit=_int(g("SANDBOX_DAILY_LIMIT"), 200),
             log_chat_id=_int(g("LOG_CHAT_ID"), 0),
             heavy_daily_limit=_int(g("HEAVY_DAILY_LIMIT"), 15),
         )
@@ -130,5 +140,5 @@ class Settings:
     def secrets(self) -> list[str]:
         """Every secret value, so error text can be scrubbed before it is logged or shown."""
         vals = [self.telegram_token, self.gemini_api_key, self.groq_api_key, self.openrouter_api_key,
-                self.cloudflare_api_token, self.tavily_api_key, self.serper_api_key, self.github_token]
+                self.cloudflare_api_token, self.tavily_api_key, self.serper_api_key, self.github_token, self.e2b_api_key]
         return [v for v in vals if v and len(v) >= 8]

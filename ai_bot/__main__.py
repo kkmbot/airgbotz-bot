@@ -15,6 +15,7 @@ from .health import start_health_server
 from .core import Assistant
 from .providers import Groq, build_providers
 from .githubread import GithubReader
+from .e2b_box import E2BBox
 from .images import ImageGen
 from .sandbox import harden_parent
 from .store import Store
@@ -63,7 +64,8 @@ async def run() -> None:
     assistant = Assistant(settings, store, chain, access,
                           SearchClient(http, settings.tavily_api_key, settings.serper_api_key),
                           Weather(http), stt=GroqSTT(groq, settings.groq_whisper_model),
-                          images=ImageGen(http, settings.cloudflare_account_id, settings.cloudflare_api_token), github=GithubReader(http, settings.github_token))
+                          images=ImageGen(http, settings.cloudflare_account_id, settings.cloudflare_api_token),
+                          box=E2BBox(settings.e2b_api_key, settings.sandbox_timeout, settings.sandbox_idle_seconds) if settings.e2b_api_key else None, github=GithubReader(http, settings.github_token))
     if settings.enable_admin_sandbox:
         harden_parent()
         logging.info("admin code sandbox is ON (not a hard security boundary)")
@@ -82,6 +84,8 @@ async def run() -> None:
         await dp.start_polling(bot, assistant=assistant, access=access, bot_username=me.username or "",
                                bot_id=me.id, allowed_updates=["message"])
     finally:
+        if assistant.box is not None:
+            await assistant.box.close_all()
         await bot.session.close()
         await http.aclose()
         store.close()
