@@ -12,7 +12,7 @@ from aiogram import BaseMiddleware, F, Router
 from aiogram.enums import ChatAction
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import BufferedInputFile, Message
+from aiogram.types import BufferedInputFile, KeyboardButton, Message, ReplyKeyboardMarkup
 
 from . import extras, persona
 from .core import Assistant
@@ -21,6 +21,11 @@ from .textutil import split_text
 
 log = logging.getLogger(__name__)
 router = Router(name="main")
+
+NEW_CHAT_LABEL = "🆕 New chat"
+NEW_CHAT_KB = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text=NEW_CHAT_LABEL)]], resize_keyboard=True, is_persistent=True,
+)
 
 
 class AccessGate(BaseMiddleware):
@@ -131,10 +136,11 @@ async def send_reply(message: Message, res) -> None:
 
 async def send_long(message: Message, text: str) -> None:
     chunks = split_text(text) or ["(khaali jawab, dobara poochho)"]
-    for chunk in chunks:
+    for idx, chunk in enumerate(chunks):
+        kb = NEW_CHAT_KB if (idx == len(chunks) - 1 and message.chat.type == "private") else None
         for attempt in range(2):
             try:
-                await message.answer(chunk, parse_mode=None)
+                await message.answer(chunk, parse_mode=None, reply_markup=kb)
                 break
             except TelegramRetryAfter as e:
                 await asyncio.sleep(e.retry_after + 1)
@@ -167,7 +173,7 @@ def _strip_mention(text: str, bot_username: str) -> str:
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, assistant: Assistant) -> None:
-    await message.answer(persona.START_TEXT.format(name=assistant.settings.bot_name), parse_mode=None)
+    await message.answer(persona.START_TEXT.format(name=assistant.settings.bot_name), parse_mode=None, reply_markup=NEW_CHAT_KB if message.chat.type == "private" else None)
 
 
 @router.message(Command("help"))
@@ -177,7 +183,8 @@ async def cmd_help(message: Message) -> None:
 
 @router.message(Command("reset"))
 async def cmd_reset(message: Message, assistant: Assistant) -> None:
-    await message.answer(assistant.reset(message.chat.id), parse_mode=None)
+    _PENDING_DOCS.pop(message.chat.id, None)
+    await message.answer(assistant.reset(message.chat.id), parse_mode=None, reply_markup=NEW_CHAT_KB if message.chat.type == "private" else None)
 
 
 @router.message(Command("model"))
@@ -399,6 +406,10 @@ async def on_text(message: Message, bot, assistant: Assistant, bot_username: str
         return
     text = _strip_mention(message.text or "", bot_username)
     if not text:
+        return
+    if text.strip() == NEW_CHAT_LABEL:
+        _PENDING_DOCS.pop(message.chat.id, None)
+        await message.answer(assistant.reset(message.chat.id) + "\nNaya chat shuru 🆕", parse_mode=None, reply_markup=NEW_CHAT_KB if message.chat.type == "private" else None)
         return
     pend = _PENDING_DOCS.get(message.chat.id)
     if pend and time.monotonic() - pend[0] < 1200 and len(text) >= 4 and not text.lstrip().startswith("/"):
