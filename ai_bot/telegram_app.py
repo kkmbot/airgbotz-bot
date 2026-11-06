@@ -333,9 +333,18 @@ async def on_document(message: Message, bot, assistant: Assistant, bot_username:
         path = await assistant.sandbox_put(message.from_user.id, message.chat.id, doc.file_name or "upload.bin", buf.getvalue())
         await message.answer(f"Uploaded to the sandbox: {path}" if path else "Upload to the sandbox failed 🙏", parse_mode=None)
         return
+    caption = _strip_mention(message.caption or "", bot_username)
+    if not caption.strip():
+        # file first, instruction in the next message: remember the file for 20 minutes
+        _PENDING_DOCS[message.chat.id] = (time.monotonic(), doc.file_name or "file.txt", buf.getvalue())
+        async with typing(bot, message.chat.id):
+            res = await assistant.edit_document(message.chat.id, message.from_user.id, doc.file_name or "file.txt", buf.getvalue(), "")
+        res.text = (res.text or "").split("\n\n(Send the file again")[0] + "\n\nNow tell me in your next message what to change (I kept the file)."
+        await send_reply(message, res)
+        return
     async with typing(bot, message.chat.id):
         res = await assistant.edit_document(message.chat.id, message.from_user.id, doc.file_name or "file.txt",
-                                            buf.getvalue(), _strip_mention(message.caption or "", bot_username))
+                                            buf.getvalue(), caption)
     await send_reply(message, res)
 
 
@@ -373,6 +382,7 @@ async def on_voice(message: Message, bot, assistant: Assistant, bot_username: st
 
 
 _REMINDERS: set = set()
+_PENDING_DOCS: dict = {}  # chat_id -> (time, file name, bytes)
 
 
 async def _remind(bot, chat_id: int, secs: int, what: str) -> None:
@@ -390,6 +400,15 @@ async def on_text(message: Message, bot, assistant: Assistant, bot_username: str
     text = _strip_mention(message.text or "", bot_username)
     if not text:
         return
+    pend = _PENDING_DOCS.get(message.chat.id)
+    if pend and time.monotonic() - pend[0] < 1200 and len(text) >= 4 and not text.lstrip().startswith("/"):
+        _PENDING_DOCS.pop(message.chat.id, None)
+        async with typing(bot, message.chat.id):
+            res = await assistant.edit_document(message.chat.id, message.from_user.id, pend[1], pend[2], text)
+        await send_reply(message, res)
+        return
+    if pend and time.monotonic() - pend[0] >= 1200:
+        _PENDING_DOCS.pop(message.chat.id, None)
     rem = extras.reminder_request(text)
     if rem:
         secs, what = rem

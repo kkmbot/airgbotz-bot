@@ -240,7 +240,14 @@ class Assistant:
             return None
         return filename.rsplit(".", 1)[0] + " edited.pdf", out
 
+    _OFFICIAL = re.compile(r"(?i)(salary|payslip|pay[ _-]?slip|bank[ _-]?statement|aadhaar|aadhar|\\bpan\\b|marksheet|mark[ _-]?sheet|degree|certificate|passport|form[ _-]?16|itr|offer[ _-]?letter|experience[ _-]?letter|relieving)")
+    _CHANGE = re.compile(r"(?i)(name|naam|month|mahin|date|tarikh|salary|amount|rupee|₹|rs\\b|number|change|badal|replace|karwana|kar do|karo)")
+
     async def edit_document(self, chat_id: int, user_id: int, filename: str, data: bytes, instruction: str) -> Reply:
+        if instruction.strip() and self._OFFICIAL.search(filename) and self._CHANGE.search(instruction):
+            return Reply("I can't change names, dates or amounts on official papers like salary slips, bank statements, IDs or certificates, "
+                         "because that makes a fake document. I can fix spelling or formatting, translate it, or build a clearly marked sample/template "
+                         "for you to fill in with your own real details.", kind="fail")
         if not self._heavy_ok(user_id):
             return Reply(persona.HEAVY_LIMIT_TEXT, kind="limit")
         try:
