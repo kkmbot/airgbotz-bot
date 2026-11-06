@@ -10,7 +10,7 @@ def test_from_env_defaults_are_admin_only():
     s = Settings.from_env({})
     assert s.allow_all is False
     assert s.admin_ids == frozenset()
-    assert s.provider_order == ("gemini", "groq", "openrouter", "cloudflare", "ollama")
+    assert s.provider_order == ("nvidia", "gemini", "groq", "openrouter", "cloudflare", "ollama")
 
 
 def test_allow_all_true_values():

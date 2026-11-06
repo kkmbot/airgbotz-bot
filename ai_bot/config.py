@@ -8,7 +8,7 @@ from typing import Mapping
 
 log = logging.getLogger(__name__)
 
-DEFAULT_ORDER = ("gemini", "groq", "openrouter", "cloudflare", "ollama")
+DEFAULT_ORDER = ("nvidia", "gemini", "groq", "openrouter", "cloudflare", "ollama")
 
 
 def _bool(v: str | None, default: bool = False) -> bool:
@@ -75,6 +75,8 @@ class Settings:
     groq_api_key: str = field(default="", repr=False)
     groq_model: str = "openai/gpt-oss-120b"
     groq_whisper_model: str = "whisper-large-v3-turbo"
+    nvidia_api_key: str = field(default="", repr=False)
+    nvidia_model: str = "z-ai/glm-5.3-flash"
     openrouter_api_key: str = field(default="", repr=False)
     openrouter_model: str = "openrouter/free"
     cloudflare_account_id: str = field(default="", repr=False)
@@ -118,6 +120,8 @@ class Settings:
             groq_api_key=(g("GROQ_API_KEY") or "").strip(),
             groq_model=g("GROQ_MODEL") or "openai/gpt-oss-120b",
             groq_whisper_model=g("GROQ_WHISPER_MODEL") or "whisper-large-v3-turbo",
+            nvidia_api_key=(g("NVIDIA_API_KEY") or "").strip(),
+            nvidia_model=g("NVIDIA_MODEL") or "z-ai/glm-5.3-flash",
             openrouter_api_key=(g("OPENROUTER_API_KEY") or "").strip(),
             openrouter_model=g("OPENROUTER_MODEL") or "openrouter/free",
             cloudflare_account_id=(g("CLOUDFLARE_ACCOUNT_ID") or "").strip(),
@@ -141,6 +145,6 @@ class Settings:
 
     def secrets(self) -> list[str]:
         """Every secret value, so error text can be scrubbed before it is logged or shown."""
-        vals = [self.telegram_token, self.gemini_api_key, self.groq_api_key, self.openrouter_api_key,
+        vals = [self.telegram_token, self.gemini_api_key, self.groq_api_key, self.nvidia_api_key, self.openrouter_api_key,
                 self.cloudflare_api_token, self.tavily_api_key, self.serper_api_key, self.github_token, self.e2b_api_key, self.browserless_api_key]
         return [v for v in vals if v and len(v) >= 8]

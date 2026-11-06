@@ -163,6 +163,13 @@ class OpenRouter(OpenAICompatible):
         return {"Authorization": f"Bearer {self.api_key}", "X-Title": "Sathi bot"}
 
 
+class Nvidia(OpenAICompatible):
+    """NVIDIA NIM free API (build.nvidia.com): GLM 5.3 Flash and other open models, about 40 requests a minute on the free tier."""
+    name = "nvidia"
+    base_url = "https://integrate.api.nvidia.com/v1"
+    timeout = 60.0
+
+
 class Cloudflare(BaseProvider):
     name = "cloudflare"
 
@@ -219,6 +226,7 @@ def build_providers(settings: Settings, client: httpx.AsyncClient) -> list[BaseP
     registry = {
         "gemini": lambda: Gemini(client, settings.gemini_api_key, settings.gemini_model, s),
         "groq": lambda: Groq(client, settings.groq_api_key, settings.groq_model, s),
+        "nvidia": lambda: Nvidia(client, settings.nvidia_api_key, settings.nvidia_model, s),
         "openrouter": lambda: OpenRouter(client, settings.openrouter_api_key, settings.openrouter_model, s),
         "cloudflare": lambda: Cloudflare(client, settings.cloudflare_account_id, settings.cloudflare_api_token,
                                          settings.cloudflare_model, s),
