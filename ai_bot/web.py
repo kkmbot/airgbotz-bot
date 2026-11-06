@@ -16,6 +16,9 @@ MAX_CHARS = 6000
 UA = "Mozilla/5.0 (compatible; SathiBot/1.0)"
 
 
+LOGIN_WALLED = ("instagram.com", "facebook.com", "fb.com", "x.com", "twitter.com", "linkedin.com", "tiktok.com", "threads.net")
+
+
 class UnsafeURL(Exception):
     pass
 
@@ -80,6 +83,10 @@ async def fetch_text(url: str, client: httpx.AsyncClient | None = None, max_char
                     cur = await check_url(urljoin(cur, r.headers["location"]))
                     continue
                 if r.status_code >= 400:
+                    host = (urlparse(cur).hostname or "").lower()
+                    if any(host == d or host.endswith("." + d) for d in LOGIN_WALLED):
+                        raise FetchFailed("this site blocks bots without a login (so I cannot open it); "
+                                          "please send a screenshot of the page instead and I will read it")
                     raise FetchFailed(f"site answered {r.status_code}")
                 ctype = r.headers.get("content-type", "").lower()
                 if ctype and not any(k in ctype for k in ("text/", "json", "xml")):
