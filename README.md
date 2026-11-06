@@ -129,7 +129,7 @@ Per-user daily cap for pictures, files, links and GitHub: `HEAVY_DAILY_LIMIT` (d
 
 ## Sandbox on E2B (recommended): a real separate Linux computer for the admin
 
-1. Make a free account at e2b.dev (the Hobby plan needs no card: a one-time $100 usage credit, sessions up to 1 hour, per the pricing page on 6 Nov 2026) and create an API key.
+1. Make a free account at e2b.dev (the Hobby plan shows a one-time $100 credit and 1-hour sessions, but on 6 Nov 2026 a new workspace was blocked until a one-time $5 card verification payment, which E2B says is returned as credits. So a card is needed) and create an API key.
 2. Put it in the host's environment variables as `E2B_API_KEY` and redeploy.
 3. Admin commands: `/run <python>`, `/sh <command>` (pip install, curl, ls), `/files` (list), `/files /home/user/chart.png` (get a file in Telegram). Send any file that is not txt/md/csv/docx/xlsx/pdf, or any file with the caption `sandbox`, and it is uploaded to `/home/user`.
 4. Agent mode: for the admin, the model can write code, run it in the sandbox, read errors and fix them (up to 5 rounds), and send back a file it made.
