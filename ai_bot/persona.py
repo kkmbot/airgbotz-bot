@@ -31,6 +31,7 @@ HELP_TEXT = """No commands needed, just write what you want:
 - paste a link or GitHub repo to have it read
 - send a file with a caption to get it edited
 - say "remember my exam is on 5 Dec" to save a note, "what do you remember" to see them, "forget my notes" to clear
+- "qr code for https://..." makes a QR; "100 usd to inr" or "bitcoin price" gives live rates; "remind me in 10 minutes to drink water" sets a reminder
 - say "reset" to clear this chat's memory, "which model" to see which AI is answering
 Admins can also say "usage", or use /allow <id>, /deny <id>, /users."""
 

@@ -15,6 +15,7 @@ from .store import Store
 from . import docs as docs_mod
 from . import sandbox as sandbox_mod
 from .githubread import GithubError
+from . import extras
 from .e2b_box import BoxUnavailable
 from .images import ImageUnavailable
 from .textutil import clean_reply
@@ -441,6 +442,13 @@ class Assistant:
         return None
 
     async def answer_text(self, chat_id: int, user_id: int, text: str, forced_tool: tuple[str, str] | None = None) -> Reply:
+        if not forced_tool:
+            q = extras.qr_request(text)
+            if q:
+                return Reply("QR code ✅", kind="ok", image=extras.make_qr(q))
+            mr = extras.money_request(text)
+            if mr:
+                return Reply(await extras.money_answer(self.http, mr))
         mem = None if forced_tool else self.memory_command(chat_id, text)
         if mem is not None:
             return Reply(mem)

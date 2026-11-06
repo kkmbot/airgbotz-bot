@@ -14,7 +14,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import BufferedInputFile, Message
 
-from . import persona
+from . import extras, persona
 from .core import Assistant
 from .access import Access
 from .textutil import split_text
@@ -372,12 +372,34 @@ async def on_voice(message: Message, bot, assistant: Assistant, bot_username: st
     await send_long(message, res.text)
 
 
+_REMINDERS: set = set()
+
+
+async def _remind(bot, chat_id: int, secs: int, what: str) -> None:
+    await asyncio.sleep(secs)
+    try:
+        await bot.send_message(chat_id, f"⏰ Reminder: {what}", parse_mode=None)
+    except Exception:  # noqa: BLE001
+        log.warning("could not deliver a reminder")
+
+
 @router.message(F.text)
 async def on_text(message: Message, bot, assistant: Assistant, bot_username: str, bot_id: int) -> None:
     if not _addressed(message, bot_username, bot_id):
         return
     text = _strip_mention(message.text or "", bot_username)
     if not text:
+        return
+    rem = extras.reminder_request(text)
+    if rem:
+        secs, what = rem
+        if len(_REMINDERS) >= 200:
+            await message.answer("Too many reminders waiting right now, try later 🙏", parse_mode=None)
+            return
+        task = asyncio.create_task(_remind(bot, message.chat.id, secs, what))
+        _REMINDERS.add(task)
+        task.add_done_callback(_REMINDERS.discard)
+        await message.answer(f"Okay ✅ I will remind you in {secs // 60 if secs >= 60 else secs} {'min' if secs >= 60 else 'sec'}: {what}\n(If the bot restarts before that, the reminder is lost.)", parse_mode=None)
         return
     async with typing(bot, message.chat.id):
         res = await assistant.answer_text(message.chat.id, message.from_user.id, text)

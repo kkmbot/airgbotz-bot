@@ -9,3 +9,4 @@ pypdf==6.21.4
 e2b-code-interpreter==2.11.9
 uharfbuzz==0.57.0
 pymupdf==2.1
+segno==1.6.6
