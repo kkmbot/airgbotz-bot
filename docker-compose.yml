@@ -1,0 +1,57 @@
+# Coolify reads this file. All secrets come from Coolify's environment screen (never from this file).
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN in Coolify}
+      ADMIN_IDS: ${ADMIN_IDS:?set ADMIN_IDS in Coolify}
+      ALLOW_ALL: ${ALLOW_ALL:-false}
+      BOT_NAME: ${BOT_NAME:-Sathi}
+      BOT_TZ_OFFSET_MINUTES: ${BOT_TZ_OFFSET_MINUTES:-330}
+      MEMORY_TURNS: ${MEMORY_TURNS:-12}
+      SUMMARY_EVERY: ${SUMMARY_EVERY:-20}
+      DAILY_USER_LIMIT: ${DAILY_USER_LIMIT:-300}
+      PROVIDER_ORDER: ${PROVIDER_ORDER:-gemini,groq,openrouter,cloudflare,ollama}
+      PROVIDER_COOLDOWN_SECONDS: ${PROVIDER_COOLDOWN_SECONDS:-600}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-lite-latest}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
+      GROQ_WHISPER_MODEL: ${GROQ_WHISPER_MODEL:-whisper-large-v3-turbo}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/free}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      CLOUDFLARE_MODEL: ${CLOUDFLARE_MODEL:-@cf/meta/llama-3.1-8b-instruct}
+      OLLAMA_URL: ${OLLAMA_URL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b-instruct}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      SERPER_API_KEY: ${SERPER_API_KEY:-}
+      DB_PATH: /data/bot.sqlite3
+    volumes:
+      - bot-data:/data
+
+  # Optional local model. Start with: docker compose --profile local-llm up -d
+  # Then set OLLAMA_URL=http://ollama:11434 in Coolify. CPU-only is slow but free.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["local-llm"]
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    profiles: ["local-llm"]
+    depends_on:
+      - ollama
+    restart: "no"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b-instruct}
+    entrypoint: ["sh", "-c", "until ollama list >/dev/null 2>&1; do sleep 3; done; ollama pull $$OLLAMA_MODEL"]
+
+volumes:
+  bot-data:
+  ollama-models:
