@@ -85,6 +85,7 @@ class Settings:
     tavily_api_key: str = field(default="", repr=False)
     serper_api_key: str = field(default="", repr=False)
     github_token: str = field(default="", repr=False)
+    browserless_api_key: str = field(default="", repr=False)
     enable_admin_sandbox: bool = False
     e2b_api_key: str = field(default="", repr=False)
     sandbox_backend: str = "auto"   # auto (e2b if key, else free judge0) | e2b | judge0 | local
@@ -127,6 +128,7 @@ class Settings:
             tavily_api_key=(g("TAVILY_API_KEY") or "").strip(),
             serper_api_key=(g("SERPER_API_KEY") or "").strip(),
             github_token=(g("GITHUB_TOKEN") or "").strip(),
+            browserless_api_key=(g("BROWSERLESS_API_KEY") or "").strip(),
             enable_admin_sandbox=_bool(g("ENABLE_ADMIN_SANDBOX"), False),
             e2b_api_key=(g("E2B_API_KEY") or "").strip(),
             sandbox_backend=(g("SANDBOX_BACKEND") or "auto").strip().lower(),
@@ -140,5 +142,5 @@ class Settings:
     def secrets(self) -> list[str]:
         """Every secret value, so error text can be scrubbed before it is logged or shown."""
         vals = [self.telegram_token, self.gemini_api_key, self.groq_api_key, self.openrouter_api_key,
-                self.cloudflare_api_token, self.tavily_api_key, self.serper_api_key, self.github_token, self.e2b_api_key]
+                self.cloudflare_api_token, self.tavily_api_key, self.serper_api_key, self.github_token, self.e2b_api_key, self.browserless_api_key]
         return [v for v in vals if v and len(v) >= 8]

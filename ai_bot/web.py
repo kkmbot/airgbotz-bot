@@ -110,3 +110,24 @@ async def fetch_text(url: str, client: httpx.AsyncClient | None = None, max_char
     finally:
         if own:
             await client.aclose()
+
+
+async def fetch_via_browser(url: str, token: str, client: httpx.AsyncClient, max_chars: int = MAX_CHARS) -> str:
+    """Last resort for pages the plain fetch cannot read (JavaScript sites, bot walls): a hosted real browser
+    renders the page and we read its text. The token is sent only to the browser service."""
+    cur = await check_url(url)
+    host = (urlparse(cur).hostname or "").lower()
+    if any(host == d or host.endswith("." + d) for d in LOGIN_WALLED):
+        raise FetchFailed("this site needs a login even in a browser; please send a screenshot of the page instead")
+    try:
+        r = await client.post("https://production-sfo.browserless.io/content", params={"token": token},
+                              json={"url": cur, "gotoOptions": {"waitUntil": "networkidle2", "timeout": 25000}},
+                              timeout=45)
+    except httpx.HTTPError as e:
+        raise FetchFailed("the browser service did not answer") from e
+    if r.status_code != 200:
+        raise FetchFailed(f"the browser could not open it ({r.status_code})")
+    title, body = html_to_text(r.text[:3_000_000])
+    if len(body) < 80:
+        raise FetchFailed("the page had no readable text")
+    return f"{title}\n{cur}\n\n{body[:max_chars]}".strip()

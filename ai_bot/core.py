@@ -17,7 +17,9 @@ from .githubread import GithubError
 from .e2b_box import BoxUnavailable
 from .images import ImageUnavailable
 from .textutil import clean_reply
-from .web import FetchFailed, UnsafeURL, fetch_text
+import httpx
+
+from .web import FetchFailed, UnsafeURL, fetch_text, fetch_via_browser
 from .tools import SearchClient, SearchUnavailable, Weather, WeatherUnavailable
 
 log = logging.getLogger(__name__)
@@ -74,6 +76,7 @@ class Assistant:
         self.images = images      # object with async generate(prompt) -> bytes
         self.github = github      # object with async read(spec) -> str
         self.fetcher = fetcher or fetch_text
+        self.http = httpx.AsyncClient(timeout=45)
         self._heavy: dict[tuple[str, int], int] = {}
         self.stt = stt  # object with transcribe(audio, filename, mime, model) and configured()
         self.tz = timezone(timedelta(minutes=settings.tz_offset_minutes))
@@ -153,7 +156,14 @@ class Assistant:
         if not self._heavy_ok(user_id):
             return persona.HEAVY_LIMIT_TEXT
         try:
-            text = await self.fetcher(url)
+            try:
+                text = await self.fetcher(url)
+                if len(text.split("\n\n", 1)[-1].strip()) < 200 and self.settings.browserless_api_key:
+                    raise FetchFailed("almost no text (probably a JavaScript page)")
+            except FetchFailed as first:
+                if not self.settings.browserless_api_key or "screenshot" in str(first):
+                    raise
+                text = await fetch_via_browser(url, self.settings.browserless_api_key, self.http)
         except UnsafeURL as e:
             return f"[link: {url}] blocked: {e}"
         except FetchFailed as e:
