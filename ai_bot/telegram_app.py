@@ -12,7 +12,7 @@ from aiogram import BaseMiddleware, F, Router
 from aiogram.enums import ChatAction
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import Message
+from aiogram.types import BufferedInputFile, Message
 
 from . import persona
 from .core import Assistant
@@ -68,6 +68,22 @@ async def typing(bot, chat_id: int):
     finally:
         stop.set()
         await task
+
+
+async def send_reply(message: Message, res) -> None:
+    """Send a core.Reply: picture, file and/or text."""
+    try:
+        if getattr(res, "image", None):
+            await message.answer_photo(BufferedInputFile(res.image, "picture.jpg"))
+        if getattr(res, "file", None):
+            name, data = res.file
+            await message.answer_document(BufferedInputFile(data, name), caption=(res.text or None))
+            return
+    except TelegramBadRequest:
+        await message.answer("I made it but Telegram refused the upload 🙏", parse_mode=None)
+        return
+    if res.text:
+        await send_long(message, res.text)
 
 
 async def send_long(message: Message, text: str) -> None:
@@ -170,6 +186,87 @@ async def cmd_users(message: Message, access: Access, assistant: Assistant) -> N
     await message.answer(text, parse_mode=None)
 
 
+@router.message(Command("image"))
+async def cmd_image(message: Message, command: CommandObject, bot, assistant: Assistant) -> None:
+    async with typing(bot, message.chat.id):
+        res = await assistant.make_image(message.from_user.id, command.args or "")
+    await send_reply(message, res)
+
+
+@router.message(Command("doc"))
+async def cmd_doc(message: Message, command: CommandObject, bot, assistant: Assistant) -> None:
+    from .docs import FORMATS, guess_format
+    args = (command.args or "").strip()
+    if not args:
+        await message.answer("Use: /doc pdf a one-page study plan for maths", parse_mode=None)
+        return
+    first, _, rest = args.partition(" ")
+    if first.lower().lstrip(".") in FORMATS:
+        fmt, brief = first.lower().lstrip("."), rest.strip()
+    else:
+        fmt, brief = guess_format(args), args
+    title = " ".join(brief.split()[:6]) or "document"
+    async with typing(bot, message.chat.id):
+        res = await assistant.make_document(message.chat.id, message.from_user.id, fmt, title, brief or title)
+    await send_reply(message, res)
+
+
+@router.message(Command("read"))
+async def cmd_read(message: Message, command: CommandObject, bot, assistant: Assistant) -> None:
+    url = (command.args or "").strip().split()[0] if (command.args or "").strip() else ""
+    if not url:
+        await message.answer("Use: /read https://example.com/article", parse_mode=None)
+        return
+    async with typing(bot, message.chat.id):
+        res = await assistant.answer_text(message.chat.id, message.from_user.id,
+                                          f"Please read this link and summarise it for me: {url}",
+                                          forced_tool=("link", url))
+    await send_reply(message, res)
+
+
+@router.message(Command("github"))
+async def cmd_github(message: Message, command: CommandObject, bot, assistant: Assistant) -> None:
+    spec = (command.args or "").strip()
+    if not spec:
+        await message.answer("Use: /github owner/repo  (or owner/repo/path, or a github.com link)", parse_mode=None)
+        return
+    async with typing(bot, message.chat.id):
+        res = await assistant.answer_text(message.chat.id, message.from_user.id,
+                                          f"Tell me about this GitHub item: {spec}",
+                                          forced_tool=("github", spec))
+    await send_reply(message, res)
+
+
+@router.message(Command("video"))
+async def cmd_video(message: Message) -> None:
+    await message.answer(persona.VIDEO_TEXT, parse_mode=None)
+
+
+@router.message(Command("run"))
+async def cmd_run(message: Message, command: CommandObject, bot, assistant: Assistant) -> None:
+    if not assistant.access.is_admin(message.from_user.id):
+        return
+    async with typing(bot, message.chat.id):
+        out = await assistant.run_code(message.from_user.id, command.args or "")
+    await message.answer(out[:3500] or "(no output)", parse_mode=None)
+
+
+@router.message(F.document)
+async def on_document(message: Message, bot, assistant: Assistant, bot_username: str, bot_id: int) -> None:
+    if not _addressed(message, bot_username, bot_id):
+        return
+    doc = message.document
+    if doc.file_size and doc.file_size > 8_000_000:
+        await message.answer("That file is over 8 MB, send a smaller one 🙏", parse_mode=None)
+        return
+    buf = io.BytesIO()
+    await bot.download(doc, destination=buf)
+    async with typing(bot, message.chat.id):
+        res = await assistant.edit_document(message.chat.id, message.from_user.id, doc.file_name or "file.txt",
+                                            buf.getvalue(), _strip_mention(message.caption or "", bot_username))
+    await send_reply(message, res)
+
+
 @router.message(F.photo)
 async def on_photo(message: Message, bot, assistant: Assistant, bot_username: str, bot_id: int) -> None:
     if not _addressed(message, bot_username, bot_id):
@@ -212,4 +309,4 @@ async def on_text(message: Message, bot, assistant: Assistant, bot_username: str
         return
     async with typing(bot, message.chat.id):
         res = await assistant.answer_text(message.chat.id, message.from_user.id, text)
-    await send_long(message, res.text)
+    await send_reply(message, res)

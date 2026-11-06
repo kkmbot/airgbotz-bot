@@ -14,6 +14,9 @@ from .config import Settings, usable_db_path
 from .health import start_health_server
 from .core import Assistant
 from .providers import Groq, build_providers
+from .githubread import GithubReader
+from .images import ImageGen
+from .sandbox import harden_parent
 from .store import Store
 from .telegram_app import AccessGate, router
 from .tools import SearchClient, Weather
@@ -59,7 +62,11 @@ async def run() -> None:
     groq = next((p for p in providers if isinstance(p, Groq)), None) or Groq(http, "", "", [])
     assistant = Assistant(settings, store, chain, access,
                           SearchClient(http, settings.tavily_api_key, settings.serper_api_key),
-                          Weather(http), stt=GroqSTT(groq, settings.groq_whisper_model))
+                          Weather(http), stt=GroqSTT(groq, settings.groq_whisper_model),
+                          images=ImageGen(http, settings.cloudflare_account_id, settings.cloudflare_api_token), github=GithubReader(http, settings.github_token))
+    if settings.enable_admin_sandbox:
+        harden_parent()
+        logging.info("admin code sandbox is ON (not a hard security boundary)")
 
     bot = Bot(token=settings.telegram_token)
     gate = AccessGate()

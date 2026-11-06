@@ -106,10 +106,37 @@ python -m ai_bot             # long polling, Ctrl+C to stop
 - `/reset`: clear this chat's memory
 - `/model`: which provider answered last, and which ones are cooling down
 - `/usage`: today's counts per provider
-- Admin only: `/allow <id>`, `/deny <id>`, `/users`
+- `/image <description>`: make a picture (also works by just asking "draw ...")
+- `/doc <docx|xlsx|pdf|txt|md|csv> <what>`: make a file (also works by asking "make me an excel file of ...")
+- `/read <link>`: read a web page and summarise it (also works by pasting a link and asking)
+- `/github <owner/repo[/path]>`: read a public GitHub repo, file or issue
+- Send a txt, md, csv, docx, xlsx or pdf with a caption like "fix the grammar" and you get the edited file back
+- `/video`: says plainly that free video generation is not available
+- Admin only: `/allow <id>`, `/deny <id>`, `/users`, `/run <python>` (only if `ENABLE_ADMIN_SANDBOX=true`)
+
+## Extra features: what backs them and their limits
+
+| Feature | Backed by | Limits |
+|---|---|---|
+| Pictures | Pollinations (no key). Optional second source: Cloudflare Workers AI flux-1-schnell if `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` are set | Pollinations anonymous tier: 1 picture per 45 seconds per server address, so a busy bot waits or says "busy". The Cloudflare path is not live-tested |
+| Links | Fetched by the bot itself | http/https only; private, local and metadata addresses and redirects to them are blocked; 1.5 MB and 15 s caps; scripts stripped; JavaScript-only pages come back empty |
+| GitHub | GitHub REST API | Public repos only. 60 requests/hour per address without `GITHUB_TOKEN`; a token only raises that limit |
+| Files | python-docx, openpyxl, fpdf2, pypdf | The edited file is rebuilt from text: colours, images and exact layout are lost. PDF text comes out of the PDF reader and can be messy. PDF output only shows Hindi and other non-Latin scripts if the server has the DejaVu font, otherwise those characters become "?" |
+| Video | none | No free service with usable limits was found, so the bot says so |
+| Code running | the bot's own Python | Admin only, off by default (see below) |
+
+Per-user daily cap for pictures, files, links and GitHub: `HEAVY_DAILY_LIMIT` (default 15). Admins are exempt.
+
+## The code runner (`/run`) is not a security boundary
+
+With `ENABLE_ADMIN_SANDBOX=true` an admin can run Python. The code runs in a separate process with an empty environment (the bot token and provider keys are not passed), a throwaway folder, and limits on time (10 s), CPU, memory, file size and output. It is **not** isolated like a container or a virtual machine: it runs as the same user on the same machine, can use the network, and can read any file that user can read. Only switch it on if the only admins are people you trust with the server. The bot also marks its own process non-dumpable so the runner cannot read its memory or environment through /proc; this was not tested on every host.
+
+## About "uncensored"
+
+The bot's personality is direct and does not lecture, and it will talk about ordinary adult topics. But it answers through free models run by Google, Groq and OpenRouter, and those have their own rules that this project cannot switch off. The bot also will not write sexual content about real people, anything involving children, help to hurt people, or material presented as real that is meant to deceive.
 
 ## What is tested and what is not
 
-- Tested by automated tests (70 tests, all pass): fallback order, 429 cooldown, admin-only gate, /allow and /deny, memory and summary, daily cap, message splitting, search and weather code paths, and the Telegram handlers driven through aiogram with a recorded (not real) Telegram connection.
+- Tested by automated tests (91 tests, all pass): fallback order, 429 cooldown, admin-only gate, /allow and /deny, memory and summary, daily cap, message splitting, search and weather code paths, and the Telegram handlers driven through aiogram with a recorded (not real) Telegram connection.
 - Tested live: the weather lookup (Open-Meteo, no key) and the OpenRouter free-model list. The bot token was checked with Telegram's getMe.
 - NOT tested yet: real Gemini, Groq, OpenRouter, Tavily answers with real keys; voice notes; photos; a real chat through Telegram; Docker build (Docker was not on the test machine); ARM servers; Ollama on your server; the Coolify deploy.
