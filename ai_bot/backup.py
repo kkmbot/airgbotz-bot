@@ -18,10 +18,21 @@ MAX_BYTES = 15_000_000
 EVERY_SECONDS = 90
 
 
-async def restore(bot, admin_id: int, db_path: str) -> str:
-    """Call BEFORE the Store opens. Only restores when there is no local database yet."""
-    if not admin_id or os.path.exists(db_path):
+async def restore(bot, admin_id, db_path: str) -> str:
+    """Call BEFORE the Store opens. Only restores when there is no local database yet.
+    admin_id may be one chat id or a list tried in order (e.g. the storage group, then the admin chat)."""
+    ids = [i for i in (admin_id if isinstance(admin_id, (list, tuple)) else [admin_id]) if i]
+    if not ids or os.path.exists(db_path):
         return "skipped"
+    last = "no backup found"
+    for cid in ids:
+        last = await _restore_from(bot, cid, db_path)
+        if last.startswith("restored"):
+            return last
+    return last
+
+
+async def _restore_from(bot, admin_id: int, db_path: str) -> str:
     try:
         chat = await bot.get_chat(admin_id)
         doc = getattr(chat.pinned_message, "document", None) if chat.pinned_message else None

@@ -60,7 +60,11 @@ async def run() -> None:
     bot = Bot(token=settings.telegram_token)
     db_path = usable_db_path(settings.db_path)
     admin0 = next(iter(settings.admin_ids), 0)
-    logging.info("memory restore: %s", await backup_mod.restore(bot, admin0, db_path))
+    try:
+        store_chat = int((os.environ.get('BACKUP_CHAT_ID') or '').strip() or admin0)
+    except ValueError:
+        store_chat = admin0
+    logging.info("memory restore: %s", await backup_mod.restore(bot, [store_chat] + ([admin0] if admin0 != store_chat else []), db_path))
     store = Store(db_path)
     access = Access(settings, store)
     http = httpx.AsyncClient(timeout=settings.request_timeout)
@@ -91,7 +95,7 @@ async def run() -> None:
     logging.info("bot is up (admins configured: %d, allow_all: %s)", len(settings.admin_ids), settings.allow_all)
     await alerts.notify("✅ Bot started. I will tell you here when an allowed user uses it (type only, never their text) and when something fails.")
     logging.info("reminders restored: %d", restore_reminders(bot, store))
-    bk = backup_mod.Backup(bot, admin0, store)
+    bk = backup_mod.Backup(bot, store_chat, store)
     bk_task = asyncio.create_task(bk.loop())
     try:
         await dp.start_polling(bot, assistant=assistant, access=access, bot_username=me.username or "",
