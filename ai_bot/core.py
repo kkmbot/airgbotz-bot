@@ -43,7 +43,7 @@ def parse_tool(reply: str) -> tuple[str, str] | None:
     if len(s) > 700:
         return None
     up = s.upper()
-    for tag, kind in (("SEARCH:", "search"), ("WEATHER:", "weather"), ("LINK:", "link"), ("GITHUB:", "github"), ("IMAGE:", "image"), ("DOC:", "doc"), ("ASTRO:", "astro")):
+    for tag, kind in (("SEARCH:", "search"), ("WEATHER:", "weather"), ("LINK:", "link"), ("GITHUB:", "github"), ("IMAGE:", "image"), ("DOC:", "doc"), ("ASTRO:", "astro"), ("MATCH:", "match")):
         if up.startswith(tag):
             arg = s[len(tag):].strip().splitlines()[0].strip() if s[len(tag):].strip() else ""
             return (kind, arg) if arg else None
@@ -128,6 +128,13 @@ class Assistant:
             return await self.read_link(self._cur_user, arg)
         if kind == "github":
             return await self.read_github(self._cur_user, arg)
+        if kind == "match":
+            try:
+                return "[kundli milan, calculated]\n" + await astro_mod.match(self.http, arg)
+            except astro_mod.AstroError as e:
+                return f"[kundli milan] could not be made: {e}. Ask the user for the missing detail."
+            except Exception:  # noqa: BLE001
+                return "[kundli milan] calculation failed. Say so honestly and ask them to retry."
         if kind == "astro":
             try:
                 return "[birth chart, calculated with real planetary positions]\n" + await astro_mod.chart(self.http, arg)
