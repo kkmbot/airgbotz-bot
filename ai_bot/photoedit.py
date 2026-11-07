@@ -124,3 +124,19 @@ def apply_ops(data: bytes, ops: list[dict]) -> bytes:
     out = io.BytesIO()
     img.save(out, "JPEG", quality=92)
     return out.getvalue()
+
+
+OCR_PROMPT = ("Read ALL the text in this image exactly as written, keeping its language and script (Hindi/Devanagari, English, Hinglish, numbers). "
+              "Keep line breaks and table rows (use ' | ' between columns). Do not translate or explain. If a word is unreadable write [?]. "
+              "If there is no text, reply exactly: NO TEXT.")
+_OCR_WORDS = re.compile(r"(?i)\b(ocr|text (nikal|padh|read|extract|copy)|read (the |this )?text|extract|likha (hai|hua)|padh|nikalo|transcribe|scan|translate|anuvad|ट्रांसलेट|अनुवाद|पढ़)")
+
+
+def photo_question(caption: str) -> str:
+    """What to ask the vision model about a photo."""
+    c = (caption or "").strip()
+    if not c:
+        return ("Ye photo kya hai? Short me batao. Agar photo me kuch text likha hai (kisi bhi bhasha me) to wo text bhi exactly likh do.")
+    if _OCR_WORDS.search(c):
+        return OCR_PROMPT + "\nThen do what the user asked: " + c
+    return c

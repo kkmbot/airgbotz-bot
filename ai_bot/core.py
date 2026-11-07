@@ -259,6 +259,30 @@ class Assistant:
     _OFFICIAL = re.compile(r"(?i)(salary|payslip|pay[ _-]?slip|bank[ _-]?statement|aadhaar|aadhar|\\bpan\\b|marksheet|mark[ _-]?sheet|degree|certificate|passport|form[ _-]?16|itr|offer[ _-]?letter|experience[ _-]?letter|relieving)")
     _CHANGE = re.compile(r"(?i)(name|naam|month|mahin|date|tarikh|salary|amount|rupee|₹|rs\\b|number|change|badal|replace|karwana|kar do|karo)")
 
+    async def _ocr_pdf(self, data: bytes, max_pages: int = 5) -> str:
+        """Scanned PDF: draw each page as a picture and let the vision model read it (Hindi and English)."""
+        import pymupdf as fitz  # PyMuPDF
+        out = []
+        try:
+            doc = fitz.open(stream=data, filetype="pdf")
+        except Exception:  # noqa: BLE001
+            return ""
+        for n, page in enumerate(doc):
+            if n >= max_pages:
+                out.append(f"[only the first {max_pages} pages were read]")
+                break
+            try:
+                jpg = page.get_pixmap(dpi=130).tobytes("jpeg")
+                txt, _ = await self.chain.generate(
+                    [{"role": "user", "content": photoedit_mod.OCR_PROMPT}], "You are an accurate OCR engine.",
+                    image=jpg, mime="image/jpeg", vision=True)
+            except AllProvidersDown:
+                break
+            except Exception:  # noqa: BLE001
+                continue
+            out.append(clean_reply(txt))
+        return "\n\n".join(x for x in out if x)
+
     async def edit_document(self, chat_id: int, user_id: int, filename: str, data: bytes, instruction: str) -> Reply:
         if instruction.strip() and self._OFFICIAL.search(filename) and self._CHANGE.search(instruction):
             return Reply("I can't change names, dates or amounts on official papers like salary slips, bank statements, IDs or certificates, "
@@ -270,6 +294,15 @@ class Assistant:
             fmt, text = docs_mod.extract_text(filename, data)
         except docs_mod.DocError as e:
             return Reply(str(e), kind="fail")
+        scanned = False
+        if fmt == "pdf" and len(text.strip()) < 20:
+            if not self._heavy_ok(user_id):
+                return Reply(persona.HEAVY_LIMIT_TEXT, kind="limit")
+            text = await self._ocr_pdf(data)
+            if len(text.strip()) < 20:
+                return Reply("Is PDF me mujhe text nahi mila (scan bahut dhundla ya khaali hai). Saaf photo bhejo to padh dunga 🙏", kind="fail")
+            scanned = True
+            self._heavy_count(user_id)
         if not instruction.strip():
             try:
                 summ, prov = await self.chain.generate(
@@ -279,7 +312,7 @@ class Assistant:
                 return Reply(persona.DOWN_TEXT, kind="down")
             self._count_user(user_id)
             return Reply(clean_reply(summ) + "\n\n(Send the file again with a caption like 'fix the grammar' or 'translate to Hindi' and I will return the edited file.)", prov, "ok")
-        if filename.lower().endswith(".pdf") and instruction.strip():
+        if filename.lower().endswith(".pdf") and instruction.strip() and not scanned:
             try:
                 done = await self._edit_pdf_inplace(chat_id, filename, data, instruction)
             except AllProvidersDown:
@@ -556,7 +589,7 @@ class Assistant:
     async def answer_photo(self, chat_id: int, user_id: int, image: bytes, mime: str, caption: str) -> Reply:
         if not self._check_cap(user_id):
             return Reply(persona.LIMIT_TEXT, kind="limit")
-        question = caption.strip() or "Ye photo kya hai? Short me batao."
+        question = photoedit_mod.photo_question(caption)
         self.store.add_message(chat_id, "user", f"[photo] {question}")
         try:
             text, provider = await self.chain.generate(
