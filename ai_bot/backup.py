@@ -9,11 +9,13 @@ import gzip
 import io
 import logging
 import os
+import re
 
 from aiogram.types import BufferedInputFile
 
 log = logging.getLogger(__name__)
 FILENAME = "airgbotz-memory-backup.sqlite3.gz"
+TAG = re.compile(r"\s*🗂bk:(\d+)")
 MAX_BYTES = 15_000_000
 EVERY_SECONDS = 90
 
@@ -35,7 +37,17 @@ async def restore(bot, admin_id, db_path: str) -> str:
 async def _restore_from(bot, admin_id: int, db_path: str) -> str:
     try:
         chat = await bot.get_chat(admin_id)
-        doc = getattr(chat.pinned_message, "document", None) if chat.pinned_message else None
+        doc = None
+        m = TAG.search(chat.description or "")
+        if m:  # group mode: the message id lives in the group description, nothing is pinned
+            fwd = await bot.forward_message(admin_id, admin_id, int(m.group(1)), disable_notification=True)
+            doc = fwd.document
+            try:
+                await bot.delete_message(admin_id, fwd.message_id)
+            except Exception:  # noqa: BLE001
+                pass
+        elif chat.pinned_message and chat.pinned_message.document:
+            doc = chat.pinned_message.document
         if not doc or doc.file_name != FILENAME:
             return "no backup found"
         buf = io.BytesIO()
@@ -61,6 +73,9 @@ class Backup:
     async def _find_previous(self) -> int:
         try:
             chat = await self.bot.get_chat(self.admin_id)
+            m = TAG.search(chat.description or "")
+            if m:
+                return int(m.group(1))
             pm = chat.pinned_message
             if pm and pm.document and pm.document.file_name == FILENAME:
                 return pm.message_id
@@ -83,10 +98,18 @@ class Backup:
         msg = await self.bot.send_document(self.admin_id, BufferedInputFile(data, FILENAME),
                                            caption="🗂 Auto memory backup (do not delete, the bot reads this after a restart)",
                                            disable_notification=True)
-        try:
-            await self.bot.pin_chat_message(self.admin_id, msg.message_id, disable_notification=True)
-        except Exception:  # noqa: BLE001
-            log.warning("could not pin the backup")
+        if self.admin_id < 0:  # group: remember the message id in the description (no pin, no "pinned" notices)
+            try:
+                chat = await self.bot.get_chat(self.admin_id)
+                base = TAG.sub("", chat.description or "").rstrip()
+                await self.bot.set_chat_description(self.admin_id, (base + "\n" if base else "") + f"🗂bk:{msg.message_id}")
+            except Exception:  # noqa: BLE001
+                log.warning("could not write the backup id into the group description")
+        else:
+            try:
+                await self.bot.pin_chat_message(self.admin_id, msg.message_id, disable_notification=True)
+            except Exception:  # noqa: BLE001
+                log.warning("could not pin the backup")
         if self._last_msg_id:
             try:
                 await self.bot.delete_message(self.admin_id, self._last_msg_id)

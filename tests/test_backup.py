@@ -20,10 +20,10 @@ def test_snapshot_roundtrip_and_reminders(tmp_path):
 
 class FakeBot:
     def __init__(self, blob=None):
-        self.blob = blob; self.sent = []; self.deleted = []; self.pinned = []
+        self.blob = blob; self.desc = ''; self.sent = []; self.deleted = []; self.pinned = []
     async def get_chat(self, _id):
-        if not self.blob: return NS(pinned_message=None)
-        return NS(pinned_message=NS(message_id=5, document=NS(file_name=backup.FILENAME)))
+        if not self.blob: return NS(pinned_message=None, description=self.desc)
+        return NS(pinned_message=NS(message_id=5, document=NS(file_name=backup.FILENAME)), description=self.desc)
     async def download(self, doc, destination):
         destination.write(self.blob)
     async def send_document(self, chat, f, caption=None, disable_notification=None):
@@ -44,3 +44,19 @@ def test_backup_then_restore(tmp_path):
     assert res.startswith("restored")
     assert Store(target).recent(7, 3)[0]["content"] == "yaad rakhna"
     assert asyncio.run(backup.restore(FakeBot(bytes(blob)), 42, target)) == "skipped"  # never overwrites
+
+
+def test_group_mode_uses_description_not_pin(tmp_path):
+    class G(FakeBot):
+        async def set_chat_description(self, cid, text): self.desc = text
+        async def forward_message(self, to, frm, mid, disable_notification=None):
+            self.fwd = mid; return NS(message_id=77, document=NS(file_name=backup.FILENAME))
+    s = Store(str(tmp_path / "a.sqlite3")); s.add_message(7, "user", "hi group")
+    bot = G()
+    assert asyncio.run(backup.Backup(bot, -100, s).run_once()) is True
+    assert not bot.pinned and "bk:9" in bot.desc
+    blob = bytes(bot.sent[0].data if hasattr(bot.sent[0], "data") else bot.sent[0].read())
+    bot2 = G(blob); bot2.desc = bot.desc
+    target = str(tmp_path / "f" / "x.sqlite3")
+    assert asyncio.run(backup.restore(bot2, -100, target)).startswith("restored") and bot2.fwd == 9
+    assert Store(target).recent(7, 3)[0]["content"] == "hi group"
