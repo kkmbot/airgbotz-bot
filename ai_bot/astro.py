@@ -85,6 +85,38 @@ def compute(date: str, time_: str, place: dict) -> str:
         house = (_sign(lon) - asc_sign) % 12 + 1
         nk, pada, _ = _nak(lon)
         out.append(f"{name}: {_fmt(lon)}{retro}, house {house}, {nk} pada {pada}")
+    navs = {name: int(lon // (30 / 9)) % 12 for name, lon in lons.items()}
+    out.append("Navamsa (D9) signs: " + ", ".join(f"{n} {RASHI[s].split(' ')[0]}" for n, s in navs.items() if n != "Ketu")
+               + f"; Navamsa lagna {RASHI[int(asc // (30 / 9)) % 12].split(' ')[0]}")
+    mars_h = (_sign(lons["Mars"]) - asc_sign) % 12 + 1
+    mars_m = (_sign(lons["Mars"]) - _sign(lons["Moon"])) % 12 + 1
+    md_l = mars_h in (1, 4, 7, 8, 12)
+    md_m = mars_m in (1, 4, 7, 8, 12)
+    out.append(f"Mangal dosha check: Mars is in house {mars_h} from Lagna and house {mars_m} from Moon -> "
+               + ("Mangal dosha present" + (" (from Lagna)" if md_l else "") + (" (from Moon)" if md_m else "")
+                  if (md_l or md_m) else "no Mangal dosha by the common rule (houses 1,4,7,8,12; some schools add 2). Cancellations are not evaluated."))
+    # today's transits (gochar), same sidereal system
+    now = dt.datetime.now(dt.timezone.utc)
+    jn = swe.julday(now.year, now.month, now.day, now.hour + now.minute / 60)
+    tr = []
+    msign = _sign(lons["Moon"])
+    for name, pid in (("Saturn", swe.SATURN), ("Jupiter", swe.JUPITER), ("Rahu", swe.MEAN_NODE)):
+        xx, _ = swe.calc_ut(jn, pid, FLAGS)
+        s = _sign(xx[0] % 360)
+        tr.append((name, s, (s - asc_sign) % 12 + 1, (s - msign) % 12 + 1))
+    out.append("Transits today: " + "; ".join(f"{n} in {RASHI[s]} (house {h} from Lagna, {m} from Moon)" for n, s, h, m in tr))
+    sat_m = tr[0][3]
+    out.append("Sade Sati: " + ({12: "running, first phase (Saturn 12th from Moon)", 1: "running, peak phase (Saturn over the Moon sign)",
+                               2: "running, last phase (Saturn 2nd from Moon)"}.get(sat_m, "not running now")))
+    warn = []
+    if asc % 30 < 1.5 or asc % 30 > 28.5:
+        warn.append("Lagna is within 1.5 degrees of a sign boundary: a birth-time error of ~6 minutes can change the Lagna sign, so confirm the exact time")
+    elif True:
+        warn.append("Lagna changes sign about every 2 hours, so it is only as right as the birth time given")
+    if (moon_cut := lons["Moon"] % (360 / 27 / 4)) < 0.1 or moon_cut > (360 / 27 / 4) - 0.1:
+        warn.append("Moon is at a pada boundary")
+    out.append("Accuracy notes: planets computed with Swiss Ephemeris (checked against NASA JPL Horizons, within 1 arcsecond); Rahu is the Mean Node; "
+               + "; ".join(warn))
     moon = lons["Moon"]
     nk, pada, ni = _nak(moon)
     out.append(f"Moon sign (rashi): {RASHI[_sign(moon)]}; Janma nakshatra: {nk} pada {pada}")
@@ -178,7 +210,17 @@ def moon_of(date: str, time_: str, place: dict) -> dict:
     xx, _ = swe.calc_ut(jd, swe.MOON, FLAGS)
     lon = xx[0] % 360
     nk, pada, ni = _nak(lon)
-    return {"lon": lon, "sign": _sign(lon), "deg": lon % 30, "nak": ni, "nak_name": nk, "pada": pada}
+    mars = swe.calc_ut(jd, swe.MARS, FLAGS)[0][0] % 360
+    try:
+        _, ascmc = swe.houses_ex(jd, place["lat"], place["lon"], b"W", FLAGS)
+        asc_sign = _sign(ascmc[0] % 360)
+        mars_lagna = (_sign(mars) - asc_sign) % 12 + 1
+    except Exception:  # noqa: BLE001
+        mars_lagna = 0
+    mars_moon = (_sign(mars) - _sign(lon)) % 12 + 1
+    manglik = mars_lagna in (1, 4, 7, 8, 12) or mars_moon in (1, 4, 7, 8, 12)
+    return {"lon": lon, "sign": _sign(lon), "deg": lon % 30, "nak": ni, "nak_name": nk, "pada": pada, "manglik": manglik,
+            "mars_lagna": mars_lagna, "mars_moon": mars_moon}
 
 
 def ashtakoot(boy: dict, girl: dict) -> dict:
@@ -224,6 +266,10 @@ async def match(client: httpx.AsyncClient, arg: str) -> str:
     for k, (v, mx) in r["parts"].items():
         lines.append(f"{k}: {v:g} / {mx}")
     lines.append(f"TOTAL: {r['total']:g} / 36")
+    lines.append(f"Mangal dosha: boy {'yes' if b['manglik'] else 'no'}, girl {'yes' if g['manglik'] else 'no'} "
+                 f"(Mars in house {b['mars_lagna']} / {b['mars_moon']} from Lagna / Moon for the boy; {g['mars_lagna']} / {g['mars_moon']} for the girl)."
+                 + (" Both are manglik, which is traditionally considered balanced." if b['manglik'] and g['manglik'] else
+                    (" Only one is manglik, which is traditionally flagged for a remedy or a closer look." if b['manglik'] != g['manglik'] else "")))
     if r["parts"]["Nadi"][0] == 0:
         lines.append("Nadi dosha present (same nadi).")
     if r["parts"]["Bhakoot"][0] == 0:

@@ -19,3 +19,12 @@ def test_total_in_range_and_dosha():
     a = moon_of("1995-05-17", "15:30", {"tz": "Asia/Kolkata"}); b = moon_of("1996-11-02", "08:10", {"tz": "Asia/Kolkata"})
     r = ashtakoot(a, b)
     assert 0 <= r["total"] <= 36 and r["parts"]["Nadi"][0] in (0, 8)
+
+
+def test_mangal_flag_present_and_chart_extras():
+    from ai_bot.astro import compute
+    m = moon_of("1995-05-17", "15:30", {"tz": "Asia/Kolkata", "lat": 28.65, "lon": 77.23})
+    assert m["manglik"] is True and m["mars_lagna"] == 12
+    out = compute("1950-09-17", "11:00", {"name": "Vadnagar", "lat": 23.78, "lon": 72.64, "tz": "Asia/Kolkata"})
+    assert "Vrishchika (Scorpio)" in out.split("\n")[2] and "Moon: Vrishchika" in out  # published chart: Scorpio lagna, Scorpio Moon
+    assert "Navamsa" in out and "Mangal dosha check" in out and "Sade Sati" in out and "Accuracy notes" in out
