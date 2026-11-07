@@ -402,12 +402,29 @@ _REMINDERS: set = set()
 _PENDING_DOCS: dict = {}  # chat_id -> (time, file name, bytes)
 
 
-async def _remind(bot, chat_id: int, secs: int, what: str) -> None:
-    await asyncio.sleep(secs)
+async def _remind(bot, chat_id: int, secs: float, what: str, store=None, rid: int = 0, late: bool = False) -> None:
+    await asyncio.sleep(max(0, secs))
     try:
-        await bot.send_message(chat_id, f"⏰ Reminder: {what}", parse_mode=None)
+        await bot.send_message(chat_id, f"⏰ Reminder{' (late, the bot had restarted)' if late else ''}: {what}", parse_mode=None)
     except Exception:  # noqa: BLE001
         log.warning("could not deliver a reminder")
+    if store is not None and rid:
+        try:
+            store.del_reminder(rid)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def restore_reminders(bot, store) -> int:
+    """After a restart: schedule every saved reminder again (overdue ones fire right away)."""
+    n = 0
+    for r in store.reminders():
+        left = r["due"] - time.time()
+        task = asyncio.create_task(_remind(bot, r["chat_id"], left, r["what"], store, r["id"], late=left < -60))
+        _REMINDERS.add(task)
+        task.add_done_callback(_REMINDERS.discard)
+        n += 1
+    return n
 
 
 @router.message(F.text)
@@ -443,10 +460,11 @@ async def on_text(message: Message, bot, assistant: Assistant, bot_username: str
         if len(_REMINDERS) >= 200:
             await message.answer("Too many reminders waiting right now, try later 🙏", parse_mode=None)
             return
-        task = asyncio.create_task(_remind(bot, message.chat.id, secs, what))
+        rid = assistant.store.add_reminder(message.chat.id, time.time() + secs, what)
+        task = asyncio.create_task(_remind(bot, message.chat.id, secs, what, assistant.store, rid))
         _REMINDERS.add(task)
         task.add_done_callback(_REMINDERS.discard)
-        await message.answer(f"Okay ✅ I will remind you in {secs // 60 if secs >= 60 else secs} {'min' if secs >= 60 else 'sec'}: {what}\n(If the bot restarts before that, the reminder is lost.)", parse_mode=None)
+        await message.answer(f"Okay ✅ I will remind you in {secs // 60 if secs >= 60 else secs} {'min' if secs >= 60 else 'sec'}: {what}", parse_mode=None)
         return
     async with typing(bot, message.chat.id):
         res = await assistant.answer_text(message.chat.id, message.from_user.id, text)

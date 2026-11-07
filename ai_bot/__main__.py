@@ -20,7 +20,8 @@ from .judge0_box import Judge0Box
 from .images import ImageGen
 from .sandbox import harden_parent
 from .store import Store
-from .telegram_app import AccessGate, AdminLog, router
+from . import backup as backup_mod
+from .telegram_app import AccessGate, AdminLog, restore_reminders, router
 from .tools import SearchClient, Weather
 
 
@@ -56,7 +57,11 @@ async def run() -> None:
         health = await start_health_server(int(port))
         logging.info("health endpoint listening on port %s", port)
 
-    store = Store(usable_db_path(settings.db_path))
+    bot = Bot(token=settings.telegram_token)
+    db_path = usable_db_path(settings.db_path)
+    admin0 = next(iter(settings.admin_ids), 0)
+    logging.info("memory restore: %s", await backup_mod.restore(bot, admin0, db_path))
+    store = Store(db_path)
     access = Access(settings, store)
     http = httpx.AsyncClient(timeout=settings.request_timeout)
     providers = build_providers(settings, http)
@@ -71,7 +76,6 @@ async def run() -> None:
         harden_parent()
         logging.info("admin code sandbox is ON (not a hard security boundary)")
 
-    bot = Bot(token=settings.telegram_token)
     gate = AccessGate()
     dp = Dispatcher()
     dp.message.outer_middleware(gate)
@@ -86,10 +90,18 @@ async def run() -> None:
     me = await bot.get_me()
     logging.info("bot is up (admins configured: %d, allow_all: %s)", len(settings.admin_ids), settings.allow_all)
     await alerts.notify("✅ Bot started. I will tell you here when an allowed user uses it (type only, never their text) and when something fails.")
+    logging.info("reminders restored: %d", restore_reminders(bot, store))
+    bk = backup_mod.Backup(bot, admin0, store)
+    bk_task = asyncio.create_task(bk.loop())
     try:
         await dp.start_polling(bot, assistant=assistant, access=access, bot_username=me.username or "",
                                bot_id=me.id, allowed_updates=["message"])
     finally:
+        bk_task.cancel()
+        try:
+            await asyncio.wait_for(bk.run_once(), timeout=8)
+        except Exception:  # noqa: BLE001
+            pass
         if assistant.box is not None:
             await assistant.box.close_all()
         await bot.session.close()

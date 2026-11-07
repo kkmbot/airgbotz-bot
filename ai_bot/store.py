@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS user_daily (
     PRIMARY KEY (day, user_id)
 );
 CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL, text TEXT NOT NULL, created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS reminders (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL, due REAL NOT NULL, what TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
 
@@ -50,6 +51,37 @@ class Store:
     def _rows(self, sql: str, params: tuple = ()) -> list[dict]:
         with self._lock:
             return [dict(r) for r in self._db.execute(sql, params).fetchall()]
+
+    def total_changes(self) -> int:
+        with self._lock:
+            return self._db.total_changes
+
+    def snapshot(self) -> bytes:
+        """A consistent copy of the whole database as bytes (for the Telegram backup)."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            p = os.path.join(tmp, "snap.sqlite3")
+            dst = sqlite3.connect(p)
+            try:
+                with self._lock:
+                    self._db.backup(dst)
+            finally:
+                dst.close()
+            with open(p, "rb") as f:
+                return f.read()
+
+    # ---- reminders (survive restarts through the Telegram backup) ----------
+    def add_reminder(self, chat_id: int, due: float, what: str) -> int:
+        with self._lock:
+            cur = self._db.execute("INSERT INTO reminders(chat_id, due, what) VALUES (?, ?, ?)", (chat_id, due, what))
+            self._db.commit()
+            return int(cur.lastrowid)
+
+    def del_reminder(self, rid: int) -> None:
+        self._run("DELETE FROM reminders WHERE id=?", (rid,))
+
+    def reminders(self) -> list[dict]:
+        return self._rows("SELECT id, chat_id, due, what FROM reminders ORDER BY due")
 
     def close(self) -> None:
         with self._lock:
