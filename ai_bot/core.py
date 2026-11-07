@@ -18,6 +18,8 @@ from .githubread import GithubError
 from . import extras
 from .e2b_box import BoxUnavailable
 from .images import ImageUnavailable, add_caption
+from . import astro as astro_mod
+from . import photoedit as photoedit_mod
 from .textutil import clean_reply
 import httpx
 
@@ -41,7 +43,7 @@ def parse_tool(reply: str) -> tuple[str, str] | None:
     if len(s) > 700:
         return None
     up = s.upper()
-    for tag, kind in (("SEARCH:", "search"), ("WEATHER:", "weather"), ("LINK:", "link"), ("GITHUB:", "github"), ("IMAGE:", "image"), ("DOC:", "doc")):
+    for tag, kind in (("SEARCH:", "search"), ("WEATHER:", "weather"), ("LINK:", "link"), ("GITHUB:", "github"), ("IMAGE:", "image"), ("DOC:", "doc"), ("ASTRO:", "astro")):
         if up.startswith(tag):
             arg = s[len(tag):].strip().splitlines()[0].strip() if s[len(tag):].strip() else ""
             return (kind, arg) if arg else None
@@ -126,6 +128,13 @@ class Assistant:
             return await self.read_link(self._cur_user, arg)
         if kind == "github":
             return await self.read_github(self._cur_user, arg)
+        if kind == "astro":
+            try:
+                return "[birth chart, calculated with real planetary positions]\n" + await astro_mod.chart(self.http, arg)
+            except astro_mod.AstroError as e:
+                return f"[birth chart] could not be made: {e}. Ask the user for the missing detail."
+            except Exception:  # noqa: BLE001
+                return "[birth chart] calculation failed. Say so honestly and ask them to retry."
         try:
             res = await self.weather.current(arg)
         except WeatherUnavailable:
@@ -521,6 +530,28 @@ class Assistant:
         self._count_user(user_id)
         await self._maybe_summarize(chat_id)
         return Reply(final, provider, "ok")
+
+    async def edit_photo(self, chat_id: int, user_id: int, image: bytes, instruction: str) -> Reply:
+        if not self._check_cap(user_id):
+            return Reply(persona.LIMIT_TEXT, kind="limit")
+        try:
+            raw, provider = await self.chain.generate([{"role": "user", "content": instruction[:500]}], photoedit_mod.SYSTEM)
+        except AllProvidersDown:
+            return Reply(persona.PHOTO_DOWN_TEXT, kind="off")
+        ops, cannot = photoedit_mod.parse_ops(raw)
+        if not ops:
+            msg = ("Ye edit main code se nahi kar sakta" + (f" ({cannot})" if cannot else "") +
+                   ". Mai ye kar sakta hun: crop, rotate, flip, resize, black & white, sepia, vintage, brightness/contrast/colour, blur, sharpen, border, aur photo pe text.")
+            return Reply(msg, provider, "ok")
+        try:
+            data = photoedit_mod.apply_ops(image, ops)
+        except Exception:  # noqa: BLE001
+            return Reply("Is photo pe edit nahi ho paya, dusri photo try karo 🙏", kind="fail")
+        self.store.add_message(chat_id, "user", f"[photo edit] {instruction[:200]}")
+        self.store.add_message(chat_id, "assistant", "[edited photo sent]")
+        self._count_user(user_id)
+        names = ", ".join(o["op"] for o in ops)
+        return Reply(f"Ho gaya ✅ ({names})", provider, "ok", image=data)
 
     async def answer_photo(self, chat_id: int, user_id: int, image: bytes, mime: str, caption: str) -> Reply:
         if not self._check_cap(user_id):

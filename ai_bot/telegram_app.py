@@ -14,13 +14,14 @@ from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import BufferedInputFile, KeyboardButton, Message, ReplyKeyboardMarkup
 
-from . import extras, persona
+from . import extras, persona, photoedit
 from .core import Assistant
 from .access import Access
 from .textutil import split_text
 
 log = logging.getLogger(__name__)
 router = Router(name="main")
+_PENDING_PHOTOS: dict[int, tuple[float, bytes]] = {}
 
 NEW_CHAT_LABEL = "🆕 New chat"
 NEW_CHAT_KB = ReplyKeyboardMarkup(
@@ -184,6 +185,7 @@ async def cmd_help(message: Message) -> None:
 @router.message(Command("reset"))
 async def cmd_reset(message: Message, assistant: Assistant) -> None:
     _PENDING_DOCS.pop(message.chat.id, None)
+    _PENDING_PHOTOS.pop(message.chat.id, None)
     await message.answer(assistant.reset(message.chat.id), parse_mode=None, reply_markup=NEW_CHAT_KB if message.chat.type == "private" else None)
 
 
@@ -365,6 +367,14 @@ async def on_photo(message: Message, bot, assistant: Assistant, bot_username: st
         return
     buf = io.BytesIO()
     await bot.download(photo, destination=buf)
+    if message.caption and photoedit.EDIT_WORDS.search(message.caption):
+        async with typing(bot, message.chat.id):
+            res = await assistant.edit_photo(message.chat.id, message.from_user.id, buf.getvalue(), message.caption)
+        await send_reply(message, res)
+        return
+    _PENDING_PHOTOS[message.chat.id] = (time.monotonic(), buf.getvalue())
+    if len(_PENDING_PHOTOS) > 50:
+        _PENDING_PHOTOS.pop(next(iter(_PENDING_PHOTOS)), None)
     async with typing(bot, message.chat.id):
         res = await assistant.answer_photo(message.chat.id, message.from_user.id, buf.getvalue(),
                                            "image/jpeg", message.caption or "")
@@ -409,6 +419,7 @@ async def on_text(message: Message, bot, assistant: Assistant, bot_username: str
         return
     if text.strip() == NEW_CHAT_LABEL:
         _PENDING_DOCS.pop(message.chat.id, None)
+        _PENDING_PHOTOS.pop(message.chat.id, None)
         await message.answer(assistant.reset(message.chat.id) + "\nNaya chat shuru 🆕", parse_mode=None, reply_markup=NEW_CHAT_KB if message.chat.type == "private" else None)
         return
     pend = _PENDING_DOCS.get(message.chat.id)
@@ -420,6 +431,12 @@ async def on_text(message: Message, bot, assistant: Assistant, bot_username: str
         return
     if pend and time.monotonic() - pend[0] >= 1200:
         _PENDING_DOCS.pop(message.chat.id, None)
+    pp_ = _PENDING_PHOTOS.get(message.chat.id)
+    if pp_ and time.monotonic() - pp_[0] < 1200 and photoedit.EDIT_WORDS.search(text) and len(text) < 300:
+        async with typing(bot, message.chat.id):
+            res = await assistant.edit_photo(message.chat.id, message.from_user.id, pp_[1], text)
+        await send_reply(message, res)
+        return
     rem = extras.reminder_request(text)
     if rem:
         secs, what = rem

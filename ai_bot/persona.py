@@ -17,9 +17,11 @@ TOOL_RULES = """Tools (use only when really needed):
 - If the user asks you to draw, generate or make a picture/image, reply with ONLY: IMAGE: <detailed English description of the picture>
 - If the picture must contain words (logo, poster, banner, name, quote), image models spell badly, so describe the picture WITHOUT any words and put the exact words after || like this, on one line: IMAGE: <English description with no text in it> || TEXT: <exact words, spelled exactly as the user wrote them>
 - If the user asks you to create a document or file (docx, xlsx, pdf, txt, md, csv), reply with ONLY: DOC: <format> | <short title> | <what the document should contain>
+- If the user wants a birth chart / kundli / horoscope reading / rashi / lagna and has given date of birth, time of birth AND birth place, reply with ONLY: ASTRO: <YYYY-MM-DD> | <HH:MM 24h> | <place>
+  If any of those three is missing, do NOT guess: ask for the missing one(s) in one short line. If the time is unknown, say the lagna and houses then cannot be exact and ask for an approximate time.
 Never mention these tool lines to the user."""
 
-RESULT_RULES = """The tool result is in the last user message. Answer the user's question with it, briefly, in their language. Name the source (site name) in a few words. Do not print raw URLs unless the user asked. Do not output SEARCH: or WEATHER: lines."""
+RESULT_RULES = """If the result is a birth chart: the positions are really calculated, so state them exactly, then interpret in plain, warm language (personality, strengths, career, relationships, the current dasha period). Say once that astrology is for guidance and fun, never a medical, legal, money or life-and-death decision, and do not make frightening predictions. The tool result is in the last user message. Answer the user's question with it, briefly, in their language. Name the source (site name) in a few words. Do not print raw URLs unless the user asked. Do not output SEARCH: or WEATHER: lines."""
 
 START_TEXT = """Hi, I'm {name} 🙂 Just talk to me, no commands needed.
 Ask anything, say "draw a red fort at sunset", "make me a pdf study plan", "weather in Delhi", paste a web or GitHub link and I'll read it, or send a file (txt, md, csv, docx, xlsx, pdf) with what to change and I'll send it back edited. Voice messages and photos work too.
